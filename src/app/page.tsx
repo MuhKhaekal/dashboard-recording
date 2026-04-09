@@ -4,6 +4,8 @@ import DistributionChart from "@/components/DistributionChart";
 import MetricsGrid from "@/components/MetricsGrid";
 import Header from "@/components/Header";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 // 1. Definisikan Interface untuk Data Supabase
 interface RawMetric {
   id: number;
