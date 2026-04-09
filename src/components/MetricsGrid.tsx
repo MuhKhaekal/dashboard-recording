@@ -1,5 +1,17 @@
 "use client";
 
+// 1. Definisikan Interface untuk struktur data unit
+interface MetricItem {
+  id: string | number;
+  type: string;
+  value: number;
+}
+
+// 2. Definisikan tipe untuk data sebelumnya (Record kunci string dengan nilai angka/string)
+interface PreviousData {
+  [key: string]: number | string | undefined;
+}
+
 const UNIT_THEME: Record<string, { color: string; label: string; order: number; id: string }> = {
   kiln: { color: "#00f2ff", label: "Primary Reactor", order: 1, id: "K-01" },
   mining: { color: "#39ff14", label: "Extraction", order: 2, id: "M-04" },
@@ -8,12 +20,20 @@ const UNIT_THEME: Record<string, { color: string; label: string; order: number; 
   dispatch: { color: "#9d00ff", label: "Logistics", order: 5, id: "D-01" },
 };
 
-export default function MetricsGrid({ latest, previous }: { latest: any[]; previous: any }) {
+export default function MetricsGrid({ 
+  latest, 
+  previous 
+}: { 
+  latest: MetricItem[]; 
+  previous: PreviousData | null | undefined 
+}) {
   const kilnData = latest.find((d) => d.type === "kiln");
-  const sortedOtherMetrics = latest.filter((d) => d.type !== "kiln").sort((a, b) => (UNIT_THEME[a.type]?.order || 0) - (UNIT_THEME[b.type]?.order || 0));
+  const sortedOtherMetrics = latest
+    .filter((d) => d.type !== "kiln")
+    .sort((a, b) => (UNIT_THEME[a.type]?.order || 0) - (UNIT_THEME[b.type]?.order || 0));
 
   const getTrend = (currentValue: number, type: string) => {
-    if (!previous || previous[type] === undefined) return { val: 0, isUp: true, percent: "0" };
+    if (!previous || previous[type] === undefined) return { val: "0.0", isUp: true, percent: "0" };
 
     const prevValue = Number(previous[type]);
     const diff = currentValue - prevValue;
@@ -29,6 +49,7 @@ export default function MetricsGrid({ latest, previous }: { latest: any[]; previ
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-6 gap-4 shrink-0 h-[28%] min-h-[180px]">
+      {/* KILN CARD */}
       {kilnData &&
         (() => {
           const trend = getTrend(kilnData.value, "kiln");
@@ -65,6 +86,7 @@ export default function MetricsGrid({ latest, previous }: { latest: any[]; previ
           );
         })()}
 
+      {/* OTHER CARDS */}
       <div className="md:col-span-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
         {sortedOtherMetrics.map((item) => {
           const theme = UNIT_THEME[item.type];
@@ -91,7 +113,7 @@ export default function MetricsGrid({ latest, previous }: { latest: any[]; previ
               </div>
 
               <div className="relative z-10 h-1 w-full bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden">
-                <div className="h-full transition-all duration-1000" style={{ width: "70%", backgroundColor: theme.color, boxShadow: `0 0 10px ${theme.color}` }} />
+                <div className="h-full transition-all duration-1000" style={{ width: `${item.value}%`, backgroundColor: theme?.color || "#cbd5e1", boxShadow: theme ? `0 0 10px ${theme.color}` : "none" }} />
               </div>
             </div>
           );

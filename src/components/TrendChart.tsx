@@ -1,7 +1,32 @@
 "use client";
-import { useRef, useEffect, useState, useCallback, useMemo } from "react";
+import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { useTheme } from "next-themes";
+
+// 1. DEFINISI INTERFACE
+interface HistoryData {
+  date: string;
+  kiln?: number;
+  mining?: number;
+  raw_mill?: number;
+  finish_mill?: number;
+  dispatch?: number;
+  [key: string]: string | number | undefined;
+}
+
+interface TooltipPayload {
+  color: string;
+  name: string;
+  value: number;
+  dataKey: string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: TooltipPayload[];
+  label?: string;
+  activeMode: string;
+}
 
 const NEON_COLORS: Record<string, string> = {
   kiln: "#00f2ff",
@@ -13,18 +38,22 @@ const NEON_COLORS: Record<string, string> = {
 
 const MODES = ["ALL", "KILN", "MINING", "RAW_MILL", "FINISH_MILL", "DISPATCH"];
 
-const CustomTooltip = ({ active, payload, label, activeMode }: any) => {
+// 2. FIX 'ANY' PADA TOOLTIP
+const CustomTooltip = ({ active, payload, label, activeMode }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
-    const filteredPayload = activeMode === "ALL" ? payload : payload.filter((item: any) => item.dataKey.toLowerCase() === activeMode.toLowerCase());
+    const filteredPayload = activeMode === "ALL" 
+      ? payload 
+      : payload.filter((item) => item.dataKey.toLowerCase() === activeMode.toLowerCase());
+    
     if (filteredPayload.length === 0) return null;
 
     return (
       <div className="bg-white/90 dark:bg-[#020617]/95 backdrop-blur-xl border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-2xl min-w-[160px] ring-1 ring-black/5 dark:ring-white/5 transition-colors">
         <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mb-3 uppercase tracking-[0.2em] border-b border-slate-100 dark:border-slate-800 pb-2">
-          {new Date(label).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+          {label ? new Date(label).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : ''}
         </p>
         <div className="space-y-2.5">
-          {filteredPayload.map((item: any, index: number) => (
+          {filteredPayload.map((item, index) => (
             <div key={index} className="flex items-center justify-between gap-6">
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.color, boxShadow: `0 0 8px ${item.color}` }} />
@@ -43,24 +72,35 @@ const CustomTooltip = ({ active, payload, label, activeMode }: any) => {
   return null;
 };
 
-export default function TrendChart({ data }: { data: any[] }) {
+export default function TrendChart({ data }: { data: HistoryData[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [mounted, setMounted] = useState(false);
-  const [activeMode, setActiveMode] = useState("ALL");
+  
+  // 3. FIX 'SETMOUNTED' & 'ANY'
+  const [isMounted, setIsMounted] = useState<boolean>(false);
+  const [activeMode, setActiveMode] = useState<string>("ALL");
   const { theme } = useTheme();
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsMounted(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const stats = useMemo(() => {
     if (!data || data.length === 0) return null;
     const mode = activeMode.toLowerCase();
-    let values = activeMode === 'ALL' 
-      ? data.flatMap(d => Object.keys(NEON_COLORS).map(k => Number(d[k]) || 0))
-      : data.map(d => Number(d[mode]) || 0);
+    
+    let values: number[] = [];
+    if (activeMode === 'ALL') {
+      values = data.flatMap(d => Object.keys(NEON_COLORS).map(k => Number(d[k]) || 0));
+    } else {
+      values = data.map(d => Number(d[mode]) || 0);
+    }
 
     return {
       max: Math.max(...values),
-      avg: values.reduce((a, b) => a + b, 0) / values.length,
+      avg: values.reduce((a, b) => a + b, 0) / (values.length || 1),
       min: Math.min(...values)
     };
   }, [data, activeMode]);
@@ -81,7 +121,7 @@ export default function TrendChart({ data }: { data: any[] }) {
     return () => clearTimeout(timer);
   }, [data, activeMode]);
 
-  if (!mounted || !data || data.length === 0) return <div className="h-full w-full bg-slate-200/40 dark:bg-slate-900/40 animate-pulse rounded-[2rem]" />;
+  if (!isMounted || !data || data.length === 0) return <div className="h-full w-full bg-slate-200/40 dark:bg-slate-900/40 animate-pulse rounded-[2rem]" />;
 
   const currentValues = activeMode === "ALL" 
     ? data.flatMap((d) => Object.keys(NEON_COLORS).map((k) => Number(d[k]) || 0))
@@ -112,7 +152,7 @@ export default function TrendChart({ data }: { data: any[] }) {
               {activeMode === "ALL" ? "System Global Trend" : `${activeMode.replace("_", " ")} Analysis`}
             </h3>
             <div className="flex items-center gap-2 mt-1">
-               <span className="text-[10px] font-mono text-cyan-500 animate-pulse">● LIVE SYNC</span>
+               <span className="text-[10px] font-mono text-cyan-500 animate-pulse font-bold">● LIVE SYNC</span>
             </div>
           </div>
 
@@ -181,7 +221,10 @@ export default function TrendChart({ data }: { data: any[] }) {
                 
                 <YAxis hide domain={[0, maxValueWithBuffer]} />
 
-                <Tooltip content={<CustomTooltip activeMode={activeMode} />} cursor={{ stroke: axisTickColor, strokeWidth: 1, strokeDasharray: "4 4" }} />
+                <Tooltip 
+                  content={<CustomTooltip activeMode={activeMode} />} 
+                  cursor={{ stroke: axisTickColor, strokeWidth: 1, strokeDasharray: "4 4" }} 
+                />
 
                 {Object.entries(NEON_COLORS).map(([key, color]) => {
                   const isVisible = activeMode === "ALL" || activeMode.toLowerCase() === key;

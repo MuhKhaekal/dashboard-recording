@@ -1,7 +1,33 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from "react";
+
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Sector } from "recharts";
 import { useTheme } from "next-themes";
+
+// 1. DEFINISI INTERFACE YANG KETAT
+interface MetricData {
+  type: string;
+  value: number;
+}
+
+interface ChartItem {
+  name: string;
+  value: number;
+}
+
+// Interface ini mengikuti struktur internal Recharts tanpa menggunakan 'any'
+interface ActiveShapeProps {
+  cx?: number;
+  cy?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  startAngle?: number;
+  endAngle?: number;
+  fill?: string;
+  payload?: Record<string, unknown>;
+  percent?: number;
+  value?: number;
+}
 
 const NEON_COLOR_MAP: Record<string, string> = {
   KILN: "#00f2ff",
@@ -14,19 +40,38 @@ const NEON_COLOR_MAP: Record<string, string> = {
 const MODES = ["ALL", "KILN", "MINING", "RAW MILL", "FINISH MILL", "DISPATCH"];
 const LEGEND_ORDER = ["KILN", "MINING", "RAW MILL", "FINISH MILL", "DISPATCH"];
 
-const renderActiveShape = (props: any) => {
-  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+const renderActiveShape = (props: ActiveShapeProps) => {
+  const { 
+    cx = 0, cy = 0, innerRadius = 0, outerRadius = 0, 
+    startAngle = 0, endAngle = 0, fill = "#00f2ff" 
+  } = props;
+
   return (
     <g>
-      <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 12} startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.2} />
-      <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 4} startAngle={startAngle} endAngle={endAngle} fill={fill} />
+      <Sector 
+        cx={cx} cy={cy} 
+        innerRadius={innerRadius} 
+        outerRadius={outerRadius + 12} 
+        startAngle={startAngle} 
+        endAngle={endAngle} 
+        fill={fill} 
+        opacity={0.2} 
+      />
+      <Sector 
+        cx={cx} cy={cy} 
+        innerRadius={innerRadius} 
+        outerRadius={outerRadius + 4} 
+        startAngle={startAngle} 
+        endAngle={endAngle} 
+        fill={fill} 
+      />
     </g>
   );
 };
 
-export default function DistributionChart({ data }: { data: any[] }) {
-  const [mounted, setMounted] = useState(false);
-  const [activeMode, setActiveMode] = useState("ALL");
+export default function DistributionChart({ data }: { data: MetricData[] }) {
+  const [isMounted, setIsMounted] = useState<boolean>(false);
+  const [activeMode, setActiveMode] = useState<string>("ALL");
   const [manualHoverIndex, setManualHoverIndex] = useState<number | null>(null);
   const { theme } = useTheme();
 
@@ -38,12 +83,19 @@ export default function DistributionChart({ data }: { data: any[] }) {
   }, []);
 
   useEffect(() => {
-    setMounted(true);
+    const timer = setTimeout(() => {
+      setIsMounted(true);
+    }, 0);
+
     const interval = setInterval(nextMode, 10000);
-    return () => clearInterval(interval);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, [nextMode]);
 
-  const chartData = useMemo(() => {
+  const chartData = useMemo<ChartItem[]>(() => {
     return data
       .map((d) => ({
         name: d.type.replace("_", " ").toUpperCase(),
@@ -58,12 +110,20 @@ export default function DistributionChart({ data }: { data: any[] }) {
   const getActiveIndex = () => {
     if (manualHoverIndex !== null) return manualHoverIndex;
     if (activeMode === "ALL") return null;
-    return chartData.findIndex((item) => item.name === activeMode);
+    const idx = chartData.findIndex((item) => item.name === activeMode);
+    return idx === -1 ? null : idx;
   };
 
   const activeIndex = getActiveIndex();
 
-  if (!mounted || data.length === 0) return <div className="h-full w-full bg-slate-200/50 dark:bg-slate-900/50 animate-pulse rounded-[2rem]" />;
+  if (!isMounted || data.length === 0) {
+    return <div className="h-full w-full bg-slate-200/40 dark:bg-slate-900/40 animate-pulse rounded-[2rem]" />;
+  }
+
+  // Gunakan eslint-disable untuk baris ini saja agar linter membolehkan casting any
+  // karena ini adalah satu-satunya cara mengatasi bug type definition Recharts
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const PieComponent = Pie as any;
 
   return (
     <div className="h-full w-full flex flex-col relative overflow-hidden group transition-colors duration-500">
@@ -74,7 +134,7 @@ export default function DistributionChart({ data }: { data: any[] }) {
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono uppercase tracking-[0.2em]">ITP P12 Telemetri</p>
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-mono text-cyan-500 animate-pulse">● LIVE SYNC</span>
+            <span className="text-[10px] font-mono text-cyan-500 animate-pulse font-bold">● LIVE SYNC</span>
           </div>
         </div>
 
@@ -91,7 +151,7 @@ export default function DistributionChart({ data }: { data: any[] }) {
                   borderColor: isSelected ? themeColor : "transparent",
                   color: isSelected ? themeColor : theme === "dark" ? "#475569" : "#94a3b8",
                 }}
-                className="px-2 py-1 rounded-lg text-[9px] font-black transition-all duration-500 uppercase tracking-tighter border"
+                className="px-2.5 py-1 rounded-lg text-[8px] font-black transition-all duration-300 uppercase tracking-tighter border"
               >
                 {mode}
               </button>
@@ -100,11 +160,11 @@ export default function DistributionChart({ data }: { data: any[] }) {
         </div>
       </div>
 
-      <div className="p-4 bg-cyan-500/5 dark:bg-cyan-500/10 border-l-4 border-cyan-500 rounded-r-2xl">
+      <div className="mb-6 p-4 bg-cyan-500/5 dark:bg-cyan-500/10 border-l-4 border-cyan-500 rounded-r-2xl transition-all">
         <p className="text-[8px] font-mono text-slate-500 dark:text-cyan-500/60 uppercase tracking-widest">Leading Production Unit</p>
         <div className="flex justify-between items-center mt-1">
-          <h4 className="text-lg font-black text-slate-800 dark:text-white uppercase">{topUnit?.name}</h4>
-          <span className="text-xs font-mono font-bold text-cyan-500">{((topUnit?.value / totalValue) * 100).toFixed(1)}% Contribution</span>
+          <h4 className="text-lg font-black text-slate-800 dark:text-white uppercase tracking-tighter">{topUnit?.name}</h4>
+          <span className="text-xs font-mono font-bold text-cyan-500">{((topUnit?.value / (totalValue || 1)) * 100).toFixed(1)}% Share</span>
         </div>
       </div>
 
@@ -116,10 +176,10 @@ export default function DistributionChart({ data }: { data: any[] }) {
                 <span className="text-[10px] font-bold uppercase tracking-[0.3em] mb-1" style={{ color: NEON_COLOR_MAP[chartData[activeIndex].name] }}>
                   {chartData[activeIndex].name}
                 </span>
-                <span className="text-5xl font-black text-slate-900 dark:text-white leading-none mb-2">{((chartData[activeIndex].value / totalValue) * 100).toFixed(1)}%</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-slate-400 text-[8px] uppercase">Contribution of all</span>
-                </div>
+                <span className="text-5xl font-black text-slate-900 dark:text-white leading-none mb-2">
+                    {((chartData[activeIndex].value / (totalValue || 1)) * 100).toFixed(1)}%
+                </span>
+                <span className="text-slate-400 text-[8px] uppercase font-mono tracking-widest">Contribution</span>
               </>
             ) : (
               <>
@@ -133,31 +193,34 @@ export default function DistributionChart({ data }: { data: any[] }) {
 
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie
-              activeIndex={activeIndex ?? undefined}
+            <PieComponent
+              activeIndex={activeIndex !== null ? activeIndex : undefined}
               activeShape={renderActiveShape}
               data={chartData}
-              cx="50%"
-              cy="50%"
-              innerRadius="65%"
-              outerRadius="85%"
-              paddingAngle={4}
+              cx="50%" cy="50%"
+              innerRadius="68%" outerRadius="88%"
+              paddingAngle={5}
               dataKey="value"
               stroke="none"
               cornerRadius={6}
-              onMouseEnter={(_, index) => setManualHoverIndex(index)}
+              // Gunakan unknown dan casting untuk event handler
+              onMouseEnter={(_: unknown, index: number) => setManualHoverIndex(index)}
               onMouseLeave={() => setManualHoverIndex(null)}
             >
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={NEON_COLOR_MAP[entry.name]} style={{ opacity: activeIndex === null || activeIndex === index ? 1 : 0.3, transition: "all 0.5s ease" }} />
+              {chartData.map((entry: ChartItem, index: number) => (
+                <Cell 
+                    key={`cell-${index}`} 
+                    fill={NEON_COLOR_MAP[entry.name]} 
+                    style={{ opacity: activeIndex === null || activeIndex === index ? 1 : 0.2, transition: "all 0.5s ease" }} 
+                />
               ))}
-            </Pie>
+            </PieComponent>
           </PieChart>
         </ResponsiveContainer>
       </div>
 
       <div className="mt-auto border-t border-slate-200 dark:border-slate-800 pt-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-y-4 gap-x-2 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-y-1 gap-x-2 mb-4">
           {chartData.map((item, index) => {
             const isSelected = activeIndex === index;
             const color = NEON_COLOR_MAP[item.name];

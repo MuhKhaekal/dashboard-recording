@@ -6,11 +6,17 @@ module.exports = {
   theme: {
     extend: {
       animation: {
+        marquee: 'marquee 25s linear infinite',
         "blob-slow": "blob-slow 20s infinite",
         "blob-medium": "blob-medium 15s infinite",
         "blob-fast": "blob-fast 12s infinite",
+        
       },
       keyframes: {
+        marquee: {
+          '0%': { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(-100%)' },
+        },
         "blob-slow": {
           "0%": { transform: "translate(0px, 0px) scale(1)" },
           "33%": { transform: "translate(100px, 150px) scale(1.2)" },

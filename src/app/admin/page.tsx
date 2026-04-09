@@ -5,13 +5,20 @@ import { supabase } from '@/library/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+// 1. Definisikan Interface untuk Data Metric
+interface MetricRow {
+  type: string;
+  value: number;
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [message, setMessage] = useState('');
   
-  const [values, setValues] = useState<{ [key: string]: string }>({
+  // Gunakan Record<string, string> daripada any
+  const [values, setValues] = useState<Record<string, string>>({
     kiln: '',
     mining: '',
     raw_mill: '',
@@ -44,9 +51,11 @@ export default function AdminPage() {
         .select('type, value')
         .eq('recorded_at', today);
 
+      // Cast data ke interface MetricRow[]
       if (data && !error && data.length > 0) {
+        const resultData = data as MetricRow[];
         const newValues = { ...values };
-        data.forEach((item) => {
+        resultData.forEach((item) => {
           newValues[item.type] = item.value.toString();
         });
         setValues(newValues);
@@ -56,6 +65,7 @@ export default function AdminPage() {
     };
 
     initializeAdmin();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -78,8 +88,13 @@ export default function AdminPage() {
 
       if (error) throw error;
       setMessage('✅ Data berhasil diperbarui untuk hari ini!');
-    } catch (error: any) {
-      setMessage('❌ Gagal update: ' + error.message);
+    } catch (error) {
+      // 2. Perbaikan Catch Block: Periksa apakah error adalah instance dari Error
+      if (error instanceof Error) {
+        setMessage('❌ Gagal update: ' + error.message);
+      } else {
+        setMessage('❌ Terjadi kesalahan yang tidak diketahui');
+      }
     } finally {
       setLoading(false);
     }
@@ -97,7 +112,7 @@ export default function AdminPage() {
   }
 
   return (
-    <main className="p-8 min-h-screen bg-[#020617] text-white">
+    <main className="p-8 min-h-screen bg-[#020617] text-white transition-colors duration-500">
       <div className="max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-10">
             <Link href="/" className="text-cyan-400/70 hover:text-cyan-400 transition-colors flex items-center gap-2 font-mono text-xs uppercase tracking-widest">
@@ -115,9 +130,9 @@ export default function AdminPage() {
             <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 blur-[80px]"></div>
 
             <header className="mb-10">
-                <h1 className="text-3xl font-black tracking-tighter uppercase">Daily <span className="text-cyan-400">Input</span></h1>
-                <p className="text-slate-500 font-mono text-xs mt-2 uppercase tracking-widest">
-                    Target Date: <span className="text-slate-300 font-bold underline decoration-cyan-500">{new Date().toLocaleDateString('en-EN', { dateStyle: 'full' })}</span>
+                <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">Daily <span className="text-cyan-400">Input</span></h1>
+                <p className="text-slate-500 font-mono text-[10px] mt-3 uppercase tracking-[0.3em]">
+                    Target_Date: <span className="text-slate-300 font-bold underline underline-offset-4 decoration-cyan-500/50">{new Date().toLocaleDateString('en-EN', { dateStyle: 'full' })}</span>
                 </p>
             </header>
             
@@ -146,16 +161,18 @@ export default function AdminPage() {
             <button
                 type="submit"
                 disabled={loading}
-                className="w-full mt-4 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-white py-5 rounded-2xl font-black uppercase tracking-[0.3em] transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] flex items-center justify-center gap-3"
+                className="w-full mt-4 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-white py-5 rounded-2xl font-black uppercase tracking-[0.3em] transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] flex items-center justify-center gap-3 active:scale-[0.98]"
             >
-                {loading ? 'PROCESSING...' : 'TRANSMIT DATA'}
+                {loading ? (
+                   <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                ) : 'TRANSMIT DATA'}
             </button>
 
             {message && (
-                <div className={`p-4 rounded-xl text-center text-xs font-mono font-bold tracking-widest border animate-in fade-in slide-in-from-top-2 duration-300 ${
+                <div className={`p-4 rounded-xl text-center text-[10px] font-mono font-bold tracking-widest border animate-in fade-in slide-in-from-top-2 duration-300 ${
                 message.includes('Gagal') 
                     ? 'bg-red-500/10 border-red-500/50 text-red-500' 
-                    : 'bg-green-500/10 border-green-500/50 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.2)]'
+                    : 'bg-green-500/10 border-green-500/50 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.1)]'
                 }`}>
                 {message}
                 </div>

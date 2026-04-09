@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTheme } from "next-themes";
 
 export default function Header({ today }: { today: string }) {
-  const [mounted, setMounted] = useState(false);
+  // 1. Berikan tipe eksplisit dan ganti nama agar unik
+  const [isMounted, setIsMounted] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const { theme, setTheme } = useTheme();
 
@@ -15,11 +16,17 @@ export default function Header({ today }: { today: string }) {
     return () => clearInterval(clockInterval);
   }, []);
 
+  // 2. Gunakan setTimeout agar update state menjadi asinkron
   useEffect(() => {
-    setMounted(true);
+    const timer = setTimeout(() => {
+      setIsMounted(true);
+    }, 0);
+    
+    return () => clearTimeout(timer);
   }, []);
 
-  if (!mounted) return null;
+  // 3. Gunakan isMounted untuk pengecekan
+  if (!isMounted) return null;
 
   return (
     <header className="flex justify-between items-center mb-6 shrink-0 border-b border-slate-200 dark:border-slate-800 pb-4 transition-colors duration-500">
