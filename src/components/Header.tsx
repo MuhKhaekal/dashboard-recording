@@ -40,6 +40,12 @@ export default function Header({ today, lastUpdated }: { today: string; lastUpda
             PROGRESS KILN <span className="text-cyan-500 dark:text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]">OVERHAUL</span>
             <span className="block text-[12px] md:text-xl font-mono text-slate-400 dark:text-slate-500 tracking-[0.4em] mt-1">ITP P12 TARJUN — 2026</span>
           </h1>
+          <div className="flex items-center md:hidden w-fit mt-2 items-end px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest me-1">Data As Of: </span>
+            <span className={`text-[10px] font-mono font-black ${isDataToday ? "text-cyan-500" : "text-amber-500"}`}>
+              {lastUpdated ? new Date(lastUpdated).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "No Data"}
+            </span>
+          </div>
         </div>
       </div>
 
