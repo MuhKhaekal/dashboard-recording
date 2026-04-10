@@ -185,7 +185,7 @@ export default function DistributionChart({ data }: { data: MetricData[] }) {
               <>
                 <span className="text-slate-400 dark:text-slate-600 text-[8px] font-bold uppercase tracking-[0.2em]">Net Summary</span>
                 <span className="text-4xl font-black text-slate-900 dark:text-white leading-none my-1">{totalValue.toLocaleString()}</span>
-                <span className="text-cyan-500/40 text-[9px] font-mono uppercase font-bold tracking-widest">Total TN/H</span>
+                <span className="text-cyan-500/40 text-[9px] font-mono uppercase font-bold tracking-widest">Total</span>
               </>
             )}
           </div>

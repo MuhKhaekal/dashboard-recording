@@ -53,7 +53,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleLogin} className="space-y-6 relative z-10">
             <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Operator_Email</label>
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Operator Email</label>
               <input
                 type="email"
                 placeholder="name@system.com"
@@ -64,7 +64,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Access_Cipher</label>
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Access Cipher</label>
               <input
                 type="password"
                 placeholder="••••••••"
@@ -89,7 +89,7 @@ export default function LoginPage() {
                 <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
               ) : (
                 <>
-                  <span className="group-hover:translate-x-1 transition-transform">Initialize_Sync</span>
+                  <span className="group-hover:translate-x-1 transition-transform">Initialize Sync</span>
                 </>
               )}
             </button>
@@ -99,12 +99,12 @@ export default function LoginPage() {
              <Link href="/" className="text-[9px] font-mono text-slate-600 hover:text-cyan-400 uppercase tracking-widest transition-colors">
                 ← Return to monitoring
              </Link>
-             <span className="text-[9px] font-mono text-slate-800 uppercase">Secure_Node_01</span>
+             <span className="text-[9px] font-mono text-slate-800 uppercase">Secure Node 01</span>
           </div>
         </div>
         
         <p className="text-center mt-8 text-[9px] font-mono text-slate-700 uppercase tracking-[0.5em]">
-          Unauth_Access_Prohibited
+          Unauth Access Prohibited
         </p>
       </div>
     </main>

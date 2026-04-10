@@ -70,7 +70,7 @@ export default function MetricsGrid({
                   <div className="flex flex-col pb-2">
                     <p className={`text-[13px] font-mono font-bold ${trend.isUp ? "text-green-600 dark:text-green-500/50" : "text-red-600 dark:text-red-500/50"}`}>
                       {trend.isUp ? "+" : "-"}
-                      {trend.val} % from yesterday
+                      {trend.val} % from the previous day
                     </p>
                   </div>
                 </div>
@@ -108,7 +108,7 @@ export default function MetricsGrid({
                 </div>
                 <p className={`text-[12px] font-mono font-bold ${trend.isUp ? "text-green-600/60 dark:text-green-500/50" : "text-red-600/60 dark:text-red-500/50"}`}>
                   {trend.isUp ? "+" : "-"}
-                  {trend.val}% from yesterday
+                  {trend.val}% from the previous day
                 </p>
               </div>
 

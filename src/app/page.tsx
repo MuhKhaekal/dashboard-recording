@@ -22,15 +22,12 @@ interface GroupedData {
 async function getDashboardData() {
   const { data, error } = await supabase.from("metrics").select("*").order("recorded_at", { ascending: true }).limit(150);
 
-  if (error || !data || data.length === 0) return { latest: [], history: [] };
+  if (error || !data || data.length === 0) return { latest: [], history: [], lastUpdated: null };
 
-  // Cast data ke interface RawMetric
   const metrics = data as RawMetric[];
-
-  const latestDate = metrics[metrics.length - 1].recorded_at;
+  const latestDate = metrics[metrics.length - 1].recorded_at; // Ambil tanggal data terakhir
   const latestMetrics = metrics.filter((d) => d.recorded_at === latestDate);
 
-  // 2. Perbaikan 'any' pada reduce
   const groupedData = metrics.reduce<Record<string, GroupedData>>((acc, curr) => {
     const date = curr.recorded_at;
     if (!acc[date]) {
@@ -40,12 +37,18 @@ async function getDashboardData() {
     return acc;
   }, {});
 
-  return { latest: latestMetrics, history: Object.values(groupedData) };
+  // Kembalikan juga latestDate
+  return { 
+    latest: latestMetrics, 
+    history: Object.values(groupedData),
+    lastUpdated: latestDate 
+  };
 }
 
 export default async function DashboardPage() {
-  const { latest, history } = await getDashboardData();
-  const today = new Intl.DateTimeFormat("en-EN", { dateStyle: "full" }).format(new Date());
+  const { latest, history, lastUpdated } = await getDashboardData();
+  const todayRaw = new Date();
+  const todayFormatted = new Intl.DateTimeFormat("en-EN", { dateStyle: "full" }).format(todayRaw);
   const previousData = history.length > 1 ? history[history.length - 2] : null;
 
   return (
@@ -63,7 +66,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="relative z-10 flex flex-col flex-1 min-w-0">
-        <Header today={today} />
+      <Header today={todayFormatted} lastUpdated={lastUpdated} />
 
         <div className="shrink-0 mb-6 overflow-x-auto pb-2 scrollbar-hide">
           <MetricsGrid latest={latest} previous={previousData} />
