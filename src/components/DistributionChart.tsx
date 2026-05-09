@@ -33,12 +33,13 @@ const NEON_COLOR_MAP: Record<string, string> = {
   KILN: "#00f2ff",
   MINING: "#39ff14",
   "RAW MILL": "#ffaa00",
+  "COAL MILL": "#fde047",
   "FINISH MILL": "#ff00ff",
   DISPATCH: "#9d00ff",
 };
 
-const MODES = ["ALL", "KILN", "MINING", "RAW MILL", "FINISH MILL", "DISPATCH"];
-const LEGEND_ORDER = ["KILN", "MINING", "RAW MILL", "FINISH MILL", "DISPATCH"];
+const MODES = ["ALL", "KILN", "MINING", "RAW MILL", "COAL MILL", "FINISH MILL", "DISPATCH"];
+const LEGEND_ORDER = ["KILN", "MINING", "RAW MILL", "COAL MILL", "FINISH MILL", "DISPATCH"];
 
 const renderActiveShape = (props: ActiveShapeProps) => {
   const { 
@@ -86,13 +87,6 @@ export default function DistributionChart({ data }: { data: MetricData[] }) {
     const timer = setTimeout(() => {
       setIsMounted(true);
     }, 0);
-
-    const interval = setInterval(nextMode, 10000);
-
-    return () => {
-      clearTimeout(timer);
-      clearInterval(interval);
-    };
   }, [nextMode]);
 
   const chartData = useMemo<ChartItem[]>(() => {
@@ -219,41 +213,6 @@ export default function DistributionChart({ data }: { data: MetricData[] }) {
         </ResponsiveContainer>
       </div>
 
-      <div className="mt-auto border-t border-slate-200 dark:border-slate-800 pt-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-y-1 gap-x-2 mb-4">
-          {chartData.map((item, index) => {
-            const isSelected = activeIndex === index;
-            const color = NEON_COLOR_MAP[item.name];
-            return (
-              <div
-                key={item.name}
-                onMouseEnter={() => setManualHoverIndex(index)}
-                onMouseLeave={() => setManualHoverIndex(null)}
-                className={`flex items-center gap-2.5 cursor-pointer transition-all duration-300 ${
-                  isSelected 
-                    ? "opacity-100 translate-x-1" 
-                    : "opacity-40 hover:opacity-100"
-                }`}
-              >
-                <div 
-                  className="w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px]" 
-                  style={{ 
-                    backgroundColor: color, 
-                    boxShadow: isSelected ? `0 0 12px ${color}` : "none" 
-                  }} 
-                />
-                
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-tighter leading-none truncate">
-                    {item.name}
-                  </span>
-                </div>
-              </div>
-
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }

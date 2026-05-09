@@ -34,29 +34,33 @@ export default function AdminPage() {
     dispatch: "",
   });
 
-  const types = ["kiln", "mining", "raw_mill", "finish_mill", "dispatch"];
+  const types = ["kiln", "mining", "raw_mill", "coal_mill", "finish_mill", "dispatch"];
 
   // 2. Fungsi Fetch Data berdasarkan tanggal yang dipilih
   const fetchDataByDate = async (date: string) => {
     setLoading(true);
     const { data, error } = await supabase.from("metrics").select("type, value").eq("recorded_at", date);
+    const initialValues: Record<string, string> = {};
+    types.forEach((t) => (initialValues[t] = ""));
 
     if (!error && data && data.length > 0) {
       const resultData = data as MetricRow[];
-      const newValues: Record<string, string> = {};
-      // Reset dulu ke kosong sebelum diisi data lama
-      types.forEach((t) => (newValues[t] = ""));
 
       resultData.forEach((item) => {
-        newValues[item.type] = item.value.toString();
+        // Hanya masukkan jika tipenya ada dalam daftar types kita
+        if (initialValues.hasOwnProperty(item.type)) {
+          initialValues[item.type] = item.value.toString();
+        }
       });
-      setValues(newValues);
+
+      setValues(initialValues);
       setIsEditMode(true);
     } else {
-      // Jika tidak ada data, kosongkan form untuk input baru
-      setValues({ kiln: "", mining: "", raw_mill: "", finish_mill: "", dispatch: "" });
+      // Jika data tidak ditemukan, kembali ke default string kosong (bukan undefined)
+      setValues(initialValues);
       setIsEditMode(false);
     }
+    setLoading(false);
     setLoading(false);
   };
 
@@ -85,13 +89,19 @@ export default function AdminPage() {
       const updates = types.map((type) => ({
         type: type,
         value: Number(values[type]) || 0,
-        recorded_at: selectedDate, // Gunakan tanggal yang dipilih
+        recorded_at: selectedDate,
       }));
 
-      const { error } = await supabase.from("metrics").upsert(updates, { onConflict: "type,recorded_at" });
+      // Tangkap error dari query Supabase
+      const { error: supabaseError } = await supabase.from("metrics").upsert(updates, { onConflict: "type,recorded_at" });
 
-      if (error) throw error;
-      setMessage(`✅ Data berhasil ${isEditMode ? "diperbarui" : "disimpan"} untuk tanggal ${selectedDate}`);
+      if (supabaseError) {
+        console.error("Supabase Error:", supabaseError);
+        throw new Error(supabaseError.message); // Lempar error agar ditangkap catch di bawah
+      }
+
+      setMessage(`✅ Data berhasil diperbarui untuk tanggal ${selectedDate}`);
+      setIsEditMode(true);
     } catch (error) {
       if (error instanceof Error) {
         setMessage("❌ Gagal: " + error.message);
@@ -163,7 +173,8 @@ export default function AdminPage() {
                     type="number"
                     required
                     step="any"
-                    value={values[type]}
+                    // PERBAIKAN DI SINI: Gunakan fallback '' jika nilainya undefined
+                    value={values[type] ?? ""}
                     onChange={(e) => setValues({ ...values, [type]: e.target.value })}
                     placeholder="0.00"
                     className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl p-4 text-white focus:border-cyan-500 outline-none transition-all font-mono font-bold"
