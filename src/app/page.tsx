@@ -4,7 +4,7 @@ import DistributionChart from "@/components/DistributionChart";
 import MetricsGrid from "@/components/MetricsGrid";
 import Header from "@/components/Header";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 // 1. Definisikan Interface untuk Data Supabase
 interface RawMetric {
@@ -38,10 +38,10 @@ async function getDashboardData() {
   }, {});
 
   // Kembalikan juga latestDate
-  return { 
-    latest: latestMetrics, 
+  return {
+    latest: latestMetrics,
     history: Object.values(groupedData),
-    lastUpdated: latestDate 
+    lastUpdated: latestDate,
   };
 }
 
@@ -66,7 +66,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="relative z-10 flex flex-col flex-1 min-w-0">
-      <Header today={todayFormatted} lastUpdated={lastUpdated} />
+        <Header today={todayFormatted} lastUpdated={lastUpdated} />
 
         <div className="shrink-0 mb-6 overflow-x-auto pb-2 scrollbar-hide">
           <MetricsGrid latest={latest} previous={previousData} />
@@ -78,18 +78,27 @@ export default async function DashboardPage() {
       </div>
 
       <div className="relative z-10 w-full lg:w-[420px] flex flex-col gap-4">
-        <div className="relative flex overflow-x-hidden bg-white/70 dark:bg-slate-900/40 backdrop-blur-md border border-slate-200 dark:border-slate-800 p-3 rounded-2xl gap-3">
-          <div className="flex shrink-0 items-center gap-2 px-2 border-r border-slate-200 dark:border-slate-800 z-10 bg-inherit">
+        <div className="relative flex overflow-hidden bg-white/70 dark:bg-slate-900/40 backdrop-blur-md border border-slate-200 dark:border-slate-800 p-3 rounded-2xl">
+          {/* LABEL LOGS: Diberi bg-inherit dan z-20 agar tetap di atas teks berjalan */}
+          <div className="flex shrink-0 items-center gap-2 px-3 pr-4 border-r border-slate-200 dark:border-slate-800 z-20 bg-white dark:bg-[#0f172a] relative">
             <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]"></div>
-            <span className="text-[9px] font-black uppercase tracking-tighter">Logs</span>
+            <span className="text-[9px] font-black uppercase tracking-tighter text-slate-700 dark:text-slate-300">Logs</span>
+
+            {/* EFFECT: Gradient mask agar teks terlihat memudar sebelum menyentuh garis pembatas */}
+            <div className="absolute top-0 -right-8 w-8 h-full bg-gradient-to-r from-white dark:from-[#0f172a] to-transparent pointer-events-none"></div>
           </div>
 
-          {/* Pengganti Marquee dengan Animasi CSS */}
-          <div className="animate-marquee whitespace-nowrap flex gap-4 text-[10px] font-mono text-slate-500 dark:text-slate-400">
-            <span>System Sync Complete ...</span>
-            <span>Database Latency: 24ms ...</span>
-            <span>Kiln Overhaul Phase 2 Initiated ...</span>
-            <span>Monitoring P12 Tarjun Node ...</span>
+          {/* CONTAINER TEKS BERJALAN: Diberi padding-left agar mulai dari setelah gradient */}
+          <div className="relative flex-1 overflow-hidden">
+            <div className="animate-marquee whitespace-nowrap flex gap-10 text-[10px] font-mono text-slate-500 dark:text-slate-400 py-0.5">
+              <span>System Sync Complete ...</span>
+              <span>Database Latency: 24ms ...</span>
+              <span>Kiln Overhaul Phase 2 Initiated ...</span>
+              <span>Monitoring P12 Tarjun Node ...</span>
+              {/* Tambahkan spasi ekstra atau ulangi teks agar loop terlihat mulus */}
+              <span>System Sync Complete ...</span>
+              <span>Database Latency: 24ms ...</span>
+            </div>
           </div>
         </div>
 

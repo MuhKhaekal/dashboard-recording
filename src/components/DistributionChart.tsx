@@ -155,26 +155,25 @@ export default function DistributionChart({ data }: { data: MetricData[] }) {
           <div className="flex flex-col items-center justify-center text-center">
             {activeIndex !== null ? (
               <>
-                {/* Nama Unit dengan Warna Identitas */}
+                {/* MODE: SINGLE AREA (Menampilkan Nilai Asli) */}
                 <span className="text-[10px] font-bold uppercase tracking-[0.3em] mb-1" style={{ color: NEON_COLOR_MAP[chartData[activeIndex].name] }}>
                   {chartData[activeIndex].name}
                 </span>
 
-                {/* Tampilkan Nilai Asli (Tonase/Value) agar konsisten dengan Net Summary */}
-                <span className="text-4xl font-black text-slate-900 dark:text-white leading-none">{chartData[activeIndex].value.toLocaleString()}</span>
+                {/* Tampilkan Nilai Asli Tanpa Persen */}
+                <span className="text-5xl font-black text-slate-900 dark:text-white leading-none mb-2">{chartData[activeIndex].value.toLocaleString()}</span>
 
-                {/* Tampilkan Persentase sebagai keterangan tambahan (Contribution) */}
-                <div className="mt-2 flex flex-col items-center">
-                  <span className="text-cyan-500 font-mono text-[12px] font-bold">{((chartData[activeIndex].value / (totalValue || 1)) * 100).toFixed(1)}%</span>
-                  <span className="text-slate-400 text-[8px] uppercase font-mono tracking-widest">Share of Total</span>
-                </div>
+                <span className="text-slate-400 text-[8px] uppercase font-mono tracking-widest">Actual Value</span>
               </>
             ) : (
               <>
-                {/* Saat Mode ALL Aktif */}
-                <span className="text-slate-400 dark:text-slate-600 text-[8px] font-bold uppercase tracking-[0.2em]">Global Net Summary</span>
-                <span className="text-5xl font-black text-slate-900 dark:text-white leading-none my-1">{totalValue.toLocaleString()}</span>
-                <span className="text-cyan-500/40 text-[9px] font-mono uppercase font-bold tracking-widest underline-offset-4">Total Output</span>
+                {/* MODE: ALL (Menampilkan Rata-rata Keseluruhan) */}
+                <span className="text-slate-400 dark:text-slate-600 text-[8px] font-bold uppercase tracking-[0.2em]">System Average Load</span>
+
+                {/* Rumus Rata-rata: Total dibagi jumlah elemen chartData */}
+                <span className="text-4xl font-black text-slate-900 dark:text-white leading-none my-1">{(totalValue / (chartData.length || 1)).toFixed(1)}</span>
+
+                <span className="text-cyan-500/40 text-[9px] font-mono uppercase font-bold tracking-widest">Avg Unit Performance</span>
               </>
             )}
           </div>
