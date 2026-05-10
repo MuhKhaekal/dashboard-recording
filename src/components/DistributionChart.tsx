@@ -42,30 +42,12 @@ const MODES = ["ALL", "KILN", "MINING", "RAW MILL", "COAL MILL", "FINISH MILL", 
 const LEGEND_ORDER = ["KILN", "MINING", "RAW MILL", "COAL MILL", "FINISH MILL", "DISPATCH"];
 
 const renderActiveShape = (props: ActiveShapeProps) => {
-  const { 
-    cx = 0, cy = 0, innerRadius = 0, outerRadius = 0, 
-    startAngle = 0, endAngle = 0, fill = "#00f2ff" 
-  } = props;
+  const { cx = 0, cy = 0, innerRadius = 0, outerRadius = 0, startAngle = 0, endAngle = 0, fill = "#00f2ff" } = props;
 
   return (
     <g>
-      <Sector 
-        cx={cx} cy={cy} 
-        innerRadius={innerRadius} 
-        outerRadius={outerRadius + 12} 
-        startAngle={startAngle} 
-        endAngle={endAngle} 
-        fill={fill} 
-        opacity={0.2} 
-      />
-      <Sector 
-        cx={cx} cy={cy} 
-        innerRadius={innerRadius} 
-        outerRadius={outerRadius + 4} 
-        startAngle={startAngle} 
-        endAngle={endAngle} 
-        fill={fill} 
-      />
+      <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 12} startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.2} />
+      <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 4} startAngle={startAngle} endAngle={endAngle} fill={fill} />
     </g>
   );
 };
@@ -132,10 +114,13 @@ export default function DistributionChart({ data }: { data: MetricData[] }) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-1.5 p-1 bg-slate-100 dark:bg-black/40 rounded-xl border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="flex flex-wrap items-center justify-center gap-1.5 p-1.5 bg-slate-100 dark:bg-black/40 rounded-xl border border-slate-200 dark:border-slate-800 transition-colors">
           {MODES.map((mode) => {
             const isSelected = activeMode === mode;
-            const themeColor = NEON_COLOR_MAP[mode] || "#00f2ff";
+            // Normalisasi key untuk mengambil warna dari map
+            const colorKey = mode.toUpperCase().replace("_", " ");
+            const themeColor = NEON_COLOR_MAP[colorKey] || "#00f2ff";
+
             return (
               <button
                 key={mode}
@@ -145,9 +130,12 @@ export default function DistributionChart({ data }: { data: MetricData[] }) {
                   borderColor: isSelected ? themeColor : "transparent",
                   color: isSelected ? themeColor : theme === "dark" ? "#475569" : "#94a3b8",
                 }}
-                className="px-2.5 py-1 rounded-lg text-[8px] font-black transition-all duration-300 uppercase tracking-tighter border"
+                /* Gunakan basis-1/5 (sekitar 21-22%) agar muat 4 di atas. 
+           flex-grow akan memastikan tombol mengisi ruang.
+        */
+                className="flex-grow basis-[22%] max-w-[24%] px-2 py-1.5 rounded-lg text-[8px] font-black transition-all duration-300 uppercase tracking-tighter border text-center"
               >
-                {mode}
+                {mode.replace("_", " ")}
               </button>
             );
           })}
@@ -167,19 +155,26 @@ export default function DistributionChart({ data }: { data: MetricData[] }) {
           <div className="flex flex-col items-center justify-center text-center">
             {activeIndex !== null ? (
               <>
+                {/* Nama Unit dengan Warna Identitas */}
                 <span className="text-[10px] font-bold uppercase tracking-[0.3em] mb-1" style={{ color: NEON_COLOR_MAP[chartData[activeIndex].name] }}>
                   {chartData[activeIndex].name}
                 </span>
-                <span className="text-5xl font-black text-slate-900 dark:text-white leading-none mb-2">
-                    {((chartData[activeIndex].value / (totalValue || 1)) * 100).toFixed(1)}%
-                </span>
-                <span className="text-slate-400 text-[8px] uppercase font-mono tracking-widest">Contribution</span>
+
+                {/* Tampilkan Nilai Asli (Tonase/Value) agar konsisten dengan Net Summary */}
+                <span className="text-4xl font-black text-slate-900 dark:text-white leading-none">{chartData[activeIndex].value.toLocaleString()}</span>
+
+                {/* Tampilkan Persentase sebagai keterangan tambahan (Contribution) */}
+                <div className="mt-2 flex flex-col items-center">
+                  <span className="text-cyan-500 font-mono text-[12px] font-bold">{((chartData[activeIndex].value / (totalValue || 1)) * 100).toFixed(1)}%</span>
+                  <span className="text-slate-400 text-[8px] uppercase font-mono tracking-widest">Share of Total</span>
+                </div>
               </>
             ) : (
               <>
-                <span className="text-slate-400 dark:text-slate-600 text-[8px] font-bold uppercase tracking-[0.2em]">Net Summary</span>
-                <span className="text-4xl font-black text-slate-900 dark:text-white leading-none my-1">{totalValue.toLocaleString()}</span>
-                <span className="text-cyan-500/40 text-[9px] font-mono uppercase font-bold tracking-widest">Total</span>
+                {/* Saat Mode ALL Aktif */}
+                <span className="text-slate-400 dark:text-slate-600 text-[8px] font-bold uppercase tracking-[0.2em]">Global Net Summary</span>
+                <span className="text-5xl font-black text-slate-900 dark:text-white leading-none my-1">{totalValue.toLocaleString()}</span>
+                <span className="text-cyan-500/40 text-[9px] font-mono uppercase font-bold tracking-widest underline-offset-4">Total Output</span>
               </>
             )}
           </div>
@@ -191,8 +186,10 @@ export default function DistributionChart({ data }: { data: MetricData[] }) {
               activeIndex={activeIndex !== null ? activeIndex : undefined}
               activeShape={renderActiveShape}
               data={chartData}
-              cx="50%" cy="50%"
-              innerRadius="68%" outerRadius="88%"
+              cx="50%"
+              cy="50%"
+              innerRadius="68%"
+              outerRadius="88%"
               paddingAngle={5}
               dataKey="value"
               stroke="none"
@@ -202,17 +199,12 @@ export default function DistributionChart({ data }: { data: MetricData[] }) {
               onMouseLeave={() => setManualHoverIndex(null)}
             >
               {chartData.map((entry: ChartItem, index: number) => (
-                <Cell 
-                    key={`cell-${index}`} 
-                    fill={NEON_COLOR_MAP[entry.name]} 
-                    style={{ opacity: activeIndex === null || activeIndex === index ? 1 : 0.2, transition: "all 0.5s ease" }} 
-                />
+                <Cell key={`cell-${index}`} fill={NEON_COLOR_MAP[entry.name]} style={{ opacity: activeIndex === null || activeIndex === index ? 1 : 0.2, transition: "all 0.5s ease" }} />
               ))}
             </PieComponent>
           </PieChart>
         </ResponsiveContainer>
       </div>
-
     </div>
   );
 }
