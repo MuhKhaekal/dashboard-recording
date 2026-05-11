@@ -26,17 +26,19 @@ export default function MetricsGrid({ latest, previous }: { latest: MetricItem[]
   const sortedOtherMetrics = latest.filter((d) => d.type !== "kiln").sort((a, b) => (UNIT_THEME[a.type]?.order || 0) - (UNIT_THEME[b.type]?.order || 0));
 
   const getTrend = (currentValue: number, type: string) => {
-    if (!previous || previous[type] === undefined) return { val: "0.0", isUp: true, percent: "0" };
+    if (!previous || previous[type] === undefined) return { val: "0.00", isUp: true, percent: "0.00" };
 
     const prevValue = Number(previous[type]);
     const diff = currentValue - prevValue;
     const isUp = diff >= 0;
-    const percent = prevValue !== 0 ? ((diff / prevValue) * 100).toFixed(1) : "0";
+
+    // Ubah toFixed(1) menjadi toFixed(2)
+    const percent = prevValue !== 0 ? ((diff / prevValue) * 100).toFixed(2) : "0.00";
 
     return {
-      val: Math.abs(diff).toFixed(1),
+      val: Math.abs(diff).toFixed(2), // Ubah ke 2 angka belakang koma
       isUp,
-      percent: Math.abs(Number(percent)),
+      percent: Math.abs(Number(percent)).toFixed(2), // Pastikan output percent juga 2 desimal
     };
   };
 
@@ -58,7 +60,7 @@ export default function MetricsGrid({ latest, previous }: { latest: MetricItem[]
 
               <div className="relative z-10 flex items-end justify-between">
                 <div className="gap-3">
-                  <span className="text-6xl font-black tracking-tighter text-slate-900 dark:text-white drop-shadow-[0_0_20px_rgba(0,242,255,0.4)] transition-colors">{kilnData.value}%</span>
+                  <span className="text-6xl font-black tracking-tighter text-slate-900 dark:text-white drop-shadow-[0_0_20px_rgba(0,242,255,0.4)] transition-colors">{kilnData.value.toFixed(2)}%</span>
                   <div className="flex flex-col pb-2">
                     <p className={`text-[13px] font-mono font-bold ${trend.isUp ? "text-green-600 dark:text-green-500/50" : "text-red-600 dark:text-red-500/50"}`}>
                       {trend.isUp ? "+" : "-"}
@@ -98,7 +100,7 @@ export default function MetricsGrid({ latest, previous }: { latest: MetricItem[]
 
             <div className="relative z-10 my-2">
               <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-black text-slate-900 dark:text-white transition-colors">{item.value}%</span>
+                <span className="text-3xl font-black text-slate-900 dark:text-white transition-colors">{item.value.toFixed(2)}%</span>
               </div>
               <p className={`text-[10px] font-mono font-bold ${trend.isUp ? "text-green-600/60 dark:text-green-500/50" : "text-red-600/60 dark:text-red-500/50"}`}>
                 {trend.isUp ? "+" : "-"} {trend.val}% from the previous day

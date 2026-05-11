@@ -86,18 +86,24 @@ export default function AdminPage() {
     setMessage("");
 
     try {
-      const updates = types.map((type) => ({
-        type: type,
-        value: Number(values[type]) || 0,
-        recorded_at: selectedDate,
-      }));
+      const updates = types.map((type) => {
+        const rawValue = values[type]?.toString().replace(",", ".") || "0";
+        return {
+          type: type,
+          value: parseFloat(rawValue) || 0,
+          recorded_at: selectedDate,
+        };
+      });
 
-      // Tangkap error dari query Supabase
       const { error: supabaseError } = await supabase.from("metrics").upsert(updates, { onConflict: "type,recorded_at" });
 
       if (supabaseError) {
-        console.error("Supabase Error:", supabaseError);
-        throw new Error(supabaseError.message); // Lempar error agar ditangkap catch di bawah
+        // Tampilkan error yang lebih spesifik ke console
+        console.log("Full Error Object:", JSON.stringify(supabaseError, null, 2));
+
+        // Ambil pesan detail dari Supabase
+        const errorDetail = supabaseError.details || supabaseError.message || "Unknown Database Error";
+        throw new Error(errorDetail);
       }
 
       setMessage(`✅ Data berhasil diperbarui untuk tanggal ${selectedDate}`);
@@ -147,13 +153,13 @@ export default function AdminPage() {
           </header>
 
           {/* DATE SELECTOR SECTION - CRITICAL FOR UX */}
-          {/* DATE SELECTOR SECTION */}
+          {/* DATE SELECTOR SECTION - CRITICAL FOR UX */}
           <div className="mb-10 p-6 bg-cyan-500/5 border border-cyan-500/20 rounded-3xl">
             <label className="block text-[10px] font-black text-cyan-500 uppercase tracking-[0.2em] mb-3 ml-1">Select Target Date</label>
+            {/* INPUT TANGGAL YANG BENAR */}
             <input
               type="date"
               value={selectedDate}
-              // TAMBAHKAN BARIS INI
               max={getTodayString()}
               onChange={(e) => setSelectedDate(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-white focus:ring-2 focus:ring-cyan-500 outline-none font-mono font-bold transition-all cursor-pointer"
