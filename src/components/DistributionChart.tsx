@@ -150,6 +150,14 @@ export default function DistributionChart({ data }: { data: MetricData[] }) {
         </div>
       </div>
 
+      {activeIndex !== null ? (
+        <>
+          <h4 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tighter text-center"></h4>
+        </>
+      ) : (
+        <><h4 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tighter text-center">Total Progress KOH</h4></>
+      )}
+
       <div className="flex-1 w-full relative min-h-[300px]">
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
           <div className="flex flex-col items-center justify-center text-center">
@@ -168,12 +176,9 @@ export default function DistributionChart({ data }: { data: MetricData[] }) {
             ) : (
               <>
                 {/* MODE: ALL (Menampilkan Rata-rata Keseluruhan) */}
-                <span className="text-slate-400 dark:text-slate-600 text-[8px] font-bold uppercase tracking-[0.2em]">System Average Load</span>
 
                 {/* Rumus Rata-rata: Total dibagi jumlah elemen chartData */}
-                <span className="text-4xl font-black text-slate-900 dark:text-white leading-none my-1">{(totalValue / (chartData.length || 1)).toFixed(1)}</span>
-
-                <span className="text-cyan-500/40 text-[9px] font-mono uppercase font-bold tracking-widest">Avg Unit Performance</span>
+                <span className="text-5xl font-black text-slate-900 dark:text-white leading-none my-1">{(totalValue / (chartData.length || 1)).toFixed(1)}%</span>
               </>
             )}
           </div>
