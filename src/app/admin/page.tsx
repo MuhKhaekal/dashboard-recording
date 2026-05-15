@@ -35,6 +35,9 @@ export default function AdminPage() {
   const [message, setMessage] = useState(""); // <-- message sudah aman di sini!
   const [historyData, setHistoryData] = useState<HistoryRow[]>([]);
 
+  const [hasPlanningData, setHasPlanningData] = useState(false);
+  const [hasMetricsData, setHasMetricsData] = useState(false);
+
   const getTodayString = () => {
     const date = new Date();
     const offset = date.getTimezoneOffset() * 60000;
@@ -81,19 +84,15 @@ export default function AdminPage() {
   const fetchDataByDate = async (date: string) => {
     setLoadingPlanning(true);
     setLoadingMetrics(true);
-    setMessage(""); // Reset pesan saat ganti tanggal
+    setMessage("");
 
-    // 1. Fetch Metrics (Aktual)
     const { data: metricsData, error: metricsError } = await supabase.from("metrics").select("type, value").eq("recorded_at", date);
-
-    // 2. Fetch Planning (S-Curve)
     const { data: planningData, error: planningError } = await supabase.from("daily_planning").select("planned_value").eq("recorded_at", date).maybeSingle();
 
     const initialValues: Record<string, string> = {};
     types.forEach((t) => (initialValues[t] = ""));
 
-    let dataExists = false;
-
+    // Deteksi Data Aktual
     if (!metricsError && metricsData && metricsData.length > 0) {
       const resultData = metricsData as MetricRow[];
       resultData.forEach((item) => {
@@ -101,18 +100,21 @@ export default function AdminPage() {
           initialValues[item.type] = item.value.toString();
         }
       });
-      dataExists = true;
+      setHasMetricsData(true); // <-- SET TRUE
+    } else {
+      setHasMetricsData(false); // <-- SET FALSE
     }
     setValues(initialValues);
 
+    // Deteksi Data Planning
     if (!planningError && planningData) {
       setPlanningValue(planningData.planned_value.toString());
-      dataExists = true;
+      setHasPlanningData(true); // <-- SET TRUE
     } else {
       setPlanningValue("");
+      setHasPlanningData(false); // <-- SET FALSE
     }
 
-    setIsEditMode(dataExists);
     setLoadingPlanning(false);
     setLoadingMetrics(false);
   };
@@ -203,6 +205,53 @@ export default function AdminPage() {
     }
   };
 
+  // ==========================================
+  // HANDLER 3: DELETE PLANNING
+  // ==========================================
+  const handleDeletePlanning = async () => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus data PLANNING untuk tanggal ${selectedDate}?`)) return;
+
+    setLoadingPlanning(true);
+    try {
+      const { error } = await supabase.from("daily_planning").delete().eq("recorded_at", selectedDate);
+      if (error) throw new Error(error.message);
+
+      setMessage(`🗑️ Data PLANNING tanggal ${selectedDate} berhasil dihapus.`);
+      setPlanningValue("");
+      setHasPlanningData(false);
+    } catch (error) {
+      if (error instanceof Error) setMessage("❌ Gagal Hapus Planning: " + error.message);
+    } finally {
+      setLoadingPlanning(false);
+    }
+  };
+
+  // ==========================================
+  // HANDLER 4: DELETE ACTUAL METRICS
+  // ==========================================
+  const handleDeleteMetrics = async () => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus SEMUA data ACTUAL METRICS (6 Area) untuk tanggal ${selectedDate}?`)) return;
+
+    setLoadingMetrics(true);
+    try {
+      // Hapus semua baris metrik yang memiliki recorded_at sesuai tanggal yang dipilih
+      const { error } = await supabase.from("metrics").delete().eq("recorded_at", selectedDate);
+      if (error) throw new Error(error.message);
+
+      setMessage(`🗑️ Data ACTUAL METRICS tanggal ${selectedDate} berhasil dihapus.`);
+
+      // Kosongkan form kembali
+      const emptyValues: Record<string, string> = {};
+      types.forEach((t) => (emptyValues[t] = ""));
+      setValues(emptyValues);
+      setHasMetricsData(false);
+    } catch (error) {
+      if (error instanceof Error) setMessage("❌ Gagal Hapus Metrics: " + error.message);
+    } finally {
+      setLoadingMetrics(false);
+    }
+  };
+
   if (checkingAuth) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#020617]">
@@ -283,10 +332,22 @@ export default function AdminPage() {
                 placeholder="0.00"
                 className="w-full bg-slate-950/80 border border-purple-500/50 rounded-2xl p-4 text-purple-100 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all font-mono font-black text-xl"
               />
+
+              {hasPlanningData && (
+                <button
+                  type="button"
+                  onClick={handleDeletePlanning}
+                  disabled={loadingPlanning || loadingMetrics}
+                  className="px-8 bg-red-600/10 hover:bg-red-600 border border-red-600/50 hover:border-red-600 text-red-500 hover:text-white rounded-2xl font-black uppercase tracking-widest transition-all my-6"
+                >
+                  DELETE
+                </button>
+              )}
+
               <button
                 type="submit"
                 disabled={loadingPlanning || loadingMetrics}
-                className="w-full mt-4 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 text-white py-4 rounded-xl font-black uppercase tracking-[0.2em] transition-all shadow-lg flex items-center justify-center gap-3 text-xs"
+                className="w-full bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 text-white py-4 rounded-xl font-black uppercase tracking-[0.2em] transition-all shadow-lg flex items-center justify-center gap-3 text-xs"
               >
                 {loadingPlanning ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div> : "TRANSMIT PLANNING"}
               </button>
@@ -322,10 +383,21 @@ export default function AdminPage() {
               ))}
             </div>
 
+            {hasMetricsData && (
+              <button
+                type="button"
+                onClick={handleDeleteMetrics}
+                disabled={loadingMetrics || loadingPlanning}
+                className="px-8 bg-red-600/10 hover:bg-red-600 border border-red-600/50 hover:border-red-600 text-red-500 hover:text-white rounded-2xl font-black uppercase tracking-widest transition-all"
+              >
+                Delete
+              </button>
+            )}
+
             <button
               type="submit"
               disabled={loadingMetrics || loadingPlanning}
-              className="w-full mt-4 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 text-white py-4 rounded-xl font-black uppercase tracking-[0.2em] transition-all shadow-lg flex items-center justify-center gap-3 text-xs"
+              className="w-full bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 text-white py-4 rounded-xl font-black uppercase tracking-[0.2em] transition-all shadow-lg flex items-center justify-center gap-3 text-xs"
             >
               {loadingMetrics ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div> : "TRANSMIT ACTUAL METRICS"}
             </button>

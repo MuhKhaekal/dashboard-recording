@@ -14,6 +14,7 @@ interface HistoryData {
   dispatch?: number;
   planned_value?: number;
   total_actual?: number;
+  average_actual?: number; // Tambahan untuk S-Curve Average
   [key: string]: string | number | undefined;
 }
 
@@ -41,9 +42,10 @@ const NEON_COLORS: Record<string, string> = {
   dispatch: "#9d00ff",
 };
 
+// PERUBAHAN WARNA S-CURVE
 const SCURVE_COLORS = {
-  planned: "#a855f7",
-  actual: "#0ea5e9",
+  planned: "#3b82f6", // Biru (Untuk Planning)
+  actual: "#ff003c", // Merah (Untuk Aktual)
 };
 
 const MODES = ["ALL", "KILN", "MINING", "RAW_MILL", "COAL_MILL", "FINISH_MILL", "DISPATCH"];
@@ -73,7 +75,7 @@ const CustomTooltip = ({ active, payload, label, activeMode, isSCurve }: CustomT
               </div>
               <div className="text-right">
                 <span className="text-sm font-mono font-black block" style={{ color: item.color }}>
-                  {item.value.toLocaleString()}
+                  {item.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span className="text-[8px] font-mono text-slate-400 dark:text-slate-600 uppercase block -mt-1">%</span>
               </div>
@@ -88,7 +90,6 @@ const CustomTooltip = ({ active, payload, label, activeMode, isSCurve }: CustomT
 
 export default function TrendChart({ data }: { data: HistoryData[] }) {
   const scrollRef1 = useRef<HTMLDivElement>(null);
-  const scrollRef2 = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState<boolean>(false);
   const [activeMode, setActiveMode] = useState<string>("ALL");
   const [currentSlide, setCurrentSlide] = useState<number>(0);
@@ -103,75 +104,101 @@ export default function TrendChart({ data }: { data: HistoryData[] }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // ========================================================
-  // FIX: PISAHKAN DATA KHUSUS UNTUK AREA TRENDS (HILANGKAN MASA DEPAN)
-  // ========================================================
+  // Filter Data Khusus Area Trends (Buang masa depan)
   const areaChartData = useMemo(() => {
     return data.filter((d) => d.total_actual !== undefined);
   }, [data]);
 
+  // Transformasi Data Khusus S-Curve (Bagi total_actual dengan 6 untuk dapat Rata-rata)
+  const sCurveData = useMemo(() => {
+    return data.map((d) => ({
+      ...d,
+      average_actual: d.total_actual !== undefined ? d.total_actual / 6 : undefined,
+    }));
+  }, [data]);
+
+  // Kalkulasi Stats Area
   const stats = useMemo(() => {
     if (!areaChartData || areaChartData.length === 0) return null;
-    const modeKey = getModeKey(activeMode);
-    let values: number[] = [];
+
     if (activeMode === "ALL") {
-      values = areaChartData.flatMap((d) => Object.keys(NEON_COLORS).map((k) => Number(d[k]) || 0));
+      const validDays = areaChartData.filter((d) => (d.total_actual || 0) > 0);
+      const grandTotal = validDays.reduce((acc, curr) => acc + (curr.total_actual || 0), 0);
+      const avg = validDays.length > 0 ? grandTotal / (validDays.length * 6) : 0;
+      const allValues = validDays.flatMap((d) => Object.keys(NEON_COLORS).map((k) => Number(d[k]) || 0));
+
+      return {
+        max: allValues.length > 0 ? Math.max(...allValues) : 0,
+        avg: avg,
+        min: allValues.length > 0 ? Math.min(...allValues) : 0,
+      };
     } else {
-      values = areaChartData.map((d) => Number(d[modeKey]) || 0);
+      const modeKey = getModeKey(activeMode);
+      const validValues = areaChartData.map((d) => Number(d[modeKey]) || 0).filter((v) => v > 0);
+
+      return {
+        max: validValues.length > 0 ? Math.max(...validValues) : 0,
+        avg: validValues.length > 0 ? validValues.reduce((a, b) => a + b, 0) / validValues.length : 0,
+        min: validValues.length > 0 ? Math.min(...validValues) : 0,
+      };
     }
-    return {
-      max: Math.max(...values),
-      avg: values.reduce((a, b) => a + b, 0) / (values.length || 1),
-      min: Math.min(...values),
-    };
   }, [areaChartData, activeMode]);
 
+  // Kalkulasi Stats S-Curve (Menggunakan Rata-rata)
+  // Kalkulasi Stats S-Curve (Menggunakan Rata-rata)
   const scurveStats = useMemo(() => {
-    if (!data || data.length === 0) return { maxActual: 0, maxPlan: 0, latestActual: 0, latestPlan: 0 };
-    const actuals = data.map((d) => Number(d.total_actual) || 0);
-    const plans = data.map((d) => Number(d.planned_value) || 0);
+    if (!sCurveData || sCurveData.length === 0) return { maxActual: 0, maxPlan: 0, latestActual: 0, latestPlan: 0 };
+
+    const actuals = sCurveData.map((d) => Number(d.average_actual) || 0);
+    const plans = sCurveData.map((d) => Number(d.planned_value) || 0);
+
+    // 1. Ambil baris data TERAKHIR yang sudah ada nilai aktualnya (Progres Hari Terakhir)
+    const lastActualRow = areaChartData.length > 0 ? areaChartData[areaChartData.length - 1] : null;
+
     return {
       maxActual: Math.max(...actuals),
       maxPlan: Math.max(...plans),
-      // Ambil data aktual terakhir dari baris yang aktualnya tidak undefined
-      latestActual: areaChartData.length > 0 ? areaChartData[areaChartData.length - 1].total_actual || 0 : 0,
-      latestPlan: plans[plans.length - 1] || 0,
-    };
-  }, [data, areaChartData]);
 
+      // 2. Rata-rata aktual di hari terakhir
+      latestActual: lastActualRow ? (lastActualRow.total_actual || 0) / 6 : 0,
+
+      // 3. FIX: Ambil Planning PADA HARI YANG SAMA dengan hari aktual terakhir (BUKAN target akhir bulan)
+      latestPlan: lastActualRow ? lastActualRow.planned_value || 0 : 0,
+    };
+  }, [sCurveData, areaChartData]);
+
+  // Scroll otomatis (Hanya untuk Area Trends sekarang)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (scrollRef1.current) scrollRef1.current.scrollLeft = scrollRef1.current.scrollWidth;
-      if (scrollRef2.current) scrollRef2.current.scrollLeft = scrollRef2.current.scrollWidth;
     }, 200);
     return () => clearTimeout(timer);
   }, [data, activeMode, currentSlide]);
 
   if (!isMounted || !data || data.length === 0) return <div className="h-full w-full bg-slate-200/40 dark:bg-slate-900/40 animate-pulse rounded-[2rem]" />;
 
-  // Kalkulasi Y-Axis menggunakan data khusus Area
+  // Y-Axis Area Trends
   const currentValues = activeMode === "ALL" ? areaChartData.flatMap((d) => Object.keys(NEON_COLORS).map((k) => Number(d[k]) || 0)) : areaChartData.map((d) => Number(d[getModeKey(activeMode)]) || 0);
-
   const rawMax = currentValues.length > 0 ? Math.max(...currentValues, 10) : 10;
   const maxValueWithBuffer = Math.ceil((rawMax * 1.2) / 10) * 10;
   const yTicksManual = [maxValueWithBuffer, Math.round(maxValueWithBuffer * 0.75), Math.round(maxValueWithBuffer * 0.5), Math.round(maxValueWithBuffer * 0.25), 0];
 
+  // Y-Axis S-Curve
   const sCurveMaxRaw = Math.max(scurveStats.maxActual, scurveStats.maxPlan, 10);
   const sCurveMaxBuffer = Math.ceil((sCurveMaxRaw * 1.1) / 10) * 10;
   const sCurveTicks = [sCurveMaxBuffer, Math.round(sCurveMaxBuffer * 0.75), Math.round(sCurveMaxBuffer * 0.5), Math.round(sCurveMaxBuffer * 0.25), 0];
 
-  // FIX: Pisahkan kalkulasi lebar chart (X-Axis) agar presisi saat discroll
+  // LEBAR CHART: Area = Bisa di-scroll, S-Curve = 100% (Terhimpit)
   const areaChartWidth = Math.max(100, (areaChartData.length * 100) / 10) + "%";
-  const sCurveChartWidth = Math.max(100, (data.length * 100) / 10) + "%";
+  const sCurveChartWidth = "100%"; // Memaksa grafik terhimpit tanpa scroll
 
   const gridStroke = theme === "dark" ? "#1e293b" : "#e2e8f0";
   const axisTickColor = theme === "dark" ? "#475569" : "#94a3b8";
 
   return (
     <div className="h-full w-full flex flex-col transition-colors duration-500 overflow-hidden relative">
-      {/* ABSOLUTE HEADER PANEL (TOMBOL & FILTER) */}
+      {/* HEADER PANEL (TOMBOL & FILTER) */}
       <div className="absolute top-0 w-full z-50 flex justify-between items-start pointer-events-none">
-        {/* KIRI: TOMBOL FILTER AREA */}
         <div
           className={`pointer-events-auto flex gap-1 p-1 bg-slate-100 dark:bg-black/40 rounded-xl border border-slate-200 dark:border-slate-800 transition-all duration-500 origin-top-left ${
             currentSlide === 0 ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
@@ -193,7 +220,6 @@ export default function TrendChart({ data }: { data: HistoryData[] }) {
           ))}
         </div>
 
-        {/* KANAN: CAROUSEL CONTROLS */}
         <div className="pointer-events-auto flex gap-2">
           <button
             onClick={() => setCurrentSlide(0)}
@@ -222,7 +248,7 @@ export default function TrendChart({ data }: { data: HistoryData[] }) {
       <div className="flex-1 w-full h-full relative overflow-hidden mt-12">
         <div className="absolute inset-0 flex h-full transition-transform duration-700 ease-in-out" style={{ width: "200%", transform: `translateX(-${currentSlide * 50}%)` }}>
           {/* ==================================================== */}
-          {/* SLIDE 1: AREA TRENDS (MENGGUNAKAN areaChartData)     */}
+          {/* SLIDE 1: AREA TRENDS                                 */}
           {/* ==================================================== */}
           <div className="w-1/2 h-full flex flex-col pr-2">
             <div className="flex flex-col gap-4 shrink-0">
@@ -259,7 +285,6 @@ export default function TrendChart({ data }: { data: HistoryData[] }) {
               </div>
               <div ref={scrollRef1} className="flex-1 h-full overflow-x-auto overflow-y-hidden scrollbar-hide">
                 <div style={{ width: areaChartWidth, minWidth: "100%" }} className="h-full">
-                  {/* FIX: LineChart di sini sekarang menggunakan areaChartData */}
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={areaChartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} opacity={0.2} />
@@ -308,7 +333,7 @@ export default function TrendChart({ data }: { data: HistoryData[] }) {
           </div>
 
           {/* ==================================================== */}
-          {/* SLIDE 2: S-CURVE CHART (TETAP MENGGUNAKAN data PENUH)*/}
+          {/* SLIDE 2: S-CURVE CHART (COMPRESSED, NO SCROLL)       */}
           {/* ==================================================== */}
           <div className="w-1/2 h-full flex flex-col pl-2">
             <div className="flex flex-col gap-4 shrink-0">
@@ -326,7 +351,8 @@ export default function TrendChart({ data }: { data: HistoryData[] }) {
                 </div>
                 <div>
                   <p className="text-[12px] font-mono text-cyan-500/80 uppercase tracking-tighter">Current Actual</p>
-                  <p className="text-lg font-black text-cyan-500 leading-none">{scurveStats.latestActual.toFixed(2)}%</p>
+                  {/* Menampilkan warna Merah jika aktual under planning */}
+                  <p className={`text-lg font-black leading-none ${scurveStats.latestActual >= scurveStats.latestPlan ? "text-cyan-500" : "text-red-500"}`}>{scurveStats.latestActual.toFixed(2)}%</p>
                 </div>
                 <div>
                   <p className="text-[12px] font-mono text-slate-400 dark:text-slate-500 uppercase tracking-tighter">Deviation</p>
@@ -346,11 +372,12 @@ export default function TrendChart({ data }: { data: HistoryData[] }) {
                   </span>
                 ))}
               </div>
-              <div ref={scrollRef2} className="flex-1 h-full overflow-x-auto overflow-y-hidden scrollbar-hide">
+              {/* FIX: Menghapus overflow-x-auto agar tidak muncul scrollbar */}
+              <div className="flex-1 h-full overflow-hidden">
+                {/* FIX: width di set mati di 100% agar data terhimpit */}
                 <div style={{ width: sCurveChartWidth, minWidth: "100%" }} className="h-full">
-                  {/* LineChart ini tetap pakai 'data' utuh agar garis planning membentang ke masa depan */}
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                    <LineChart data={sCurveData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} opacity={0.2} />
                       <XAxis
                         dataKey="date"
@@ -364,6 +391,7 @@ export default function TrendChart({ data }: { data: HistoryData[] }) {
 
                       <Tooltip content={<CustomTooltip activeMode="ALL" isSCurve={true} />} cursor={{ stroke: axisTickColor, strokeWidth: 1, strokeDasharray: "4 4" }} />
 
+                      {/* GARIS BIRU PUTUS-PUTUS (PLANNING) */}
                       <Line
                         type="monotone"
                         dataKey="planned_value"
@@ -376,14 +404,15 @@ export default function TrendChart({ data }: { data: HistoryData[] }) {
                         isAnimationActive={true}
                       />
 
+                      {/* GARIS MERAH TEGAS (ACTUAL AVERAGE) */}
                       <Line
                         type="monotone"
-                        dataKey="total_actual"
+                        dataKey="average_actual"
                         name="ACTUAL PROGRESS"
                         stroke={SCURVE_COLORS.actual}
-                        strokeWidth={4}
+                        strokeWidth={2}
                         dot={{ r: 3, fill: SCURVE_COLORS.actual, strokeWidth: 0 }}
-                        activeDot={{ r: 7, stroke: theme === "dark" ? "#fff" : "#000", strokeWidth: 2 }}
+                        activeDot={{ r: 7, stroke: theme === "dark" ? "#fff" : "#000", strokeWidth: 1 }}
                         isAnimationActive={true}
                       />
                     </LineChart>

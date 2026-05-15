@@ -178,7 +178,7 @@ export default function DistributionChart({ data }: { data: MetricData[] }) {
                 {/* MODE: ALL (Menampilkan Rata-rata Keseluruhan) */}
 
                 {/* Rumus Rata-rata: Total dibagi jumlah elemen chartData */}
-                <span className="text-5xl font-black text-slate-900 dark:text-white leading-none my-1">{(totalValue / (chartData.length || 1)).toFixed(1)}%</span>
+                <span className="text-5xl font-black text-slate-900 dark:text-white leading-none my-1">{(totalValue / (chartData.length || 1)).toFixed(2)}%</span>
               </>
             )}
           </div>
