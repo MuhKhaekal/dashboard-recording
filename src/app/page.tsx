@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
 // 1. Definisikan Interface untuk Data Supabase
 interface RawMetric {
   id: number;
@@ -14,33 +15,76 @@ interface RawMetric {
   value: number;
 }
 
+interface DailyPlanningRow {
+  recorded_at: string;
+  planned_value: number;
+}
+
 interface GroupedData {
   date: string;
-  [key: string]: string | number; // Memungkinkan akses dynamic key seperti 'kiln', 'mining', dll
+  total_actual?: number;
+  planned_value?: number;
+  [key: string]: string | number | undefined;
 }
 
 async function getDashboardData() {
-  const { data, error } = await supabase.from("metrics").select("*").order("recorded_at", { ascending: true }).limit(150);
+  // Ambil data Metrics (Aktual) dan Planning secara paralel agar lebih cepat
+  const [metricsResponse, planningResponse] = await Promise.all([
+    supabase.from("metrics").select("*").order("recorded_at", { ascending: true }).limit(500),
+    supabase.from("daily_planning").select("recorded_at, planned_value").order("recorded_at", { ascending: true }),
+  ]);
 
-  if (error || !data || data.length === 0) return { latest: [], history: [], lastUpdated: null };
+  const metrics = (metricsResponse.data || []) as RawMetric[];
+  const plannings = (planningResponse.data || []) as DailyPlanningRow[];
 
-  const metrics = data as RawMetric[];
-  const latestDate = metrics[metrics.length - 1].recorded_at; // Ambil tanggal data terakhir
-  const latestMetrics = metrics.filter((d) => d.recorded_at === latestDate);
+  if (metrics.length === 0 && plannings.length === 0) {
+    return { latest: [], history: [], lastUpdated: null };
+  }
 
-  const groupedData = metrics.reduce<Record<string, GroupedData>>((acc, curr) => {
-    const date = curr.recorded_at;
-    if (!acc[date]) {
-      acc[date] = { date };
+  // Objek penampung untuk menggabungkan data berdasarkan tanggal
+  const dataMap: Record<string, GroupedData> = {};
+
+  // 1. Olah Data Metrics Aktual
+  metrics.forEach((curr) => {
+    const date = curr.recorded_at.split("T")[0];
+    if (!dataMap[date]) {
+      dataMap[date] = { date };
     }
-    acc[date][curr.type] = curr.value;
-    return acc;
-  }, {});
 
-  // Kembalikan juga latestDate
+    // Masukkan nilai per unit (kiln, mining, dll)
+    dataMap[date][curr.type] = curr.value;
+
+    // Kalkulasi total_actual (penjumlahan otomatis 6 area)
+    dataMap[date].total_actual = (dataMap[date].total_actual || 0) + curr.value;
+  });
+
+  // 2. Olah Data Planning (S-Curve)
+  plannings.forEach((curr) => {
+    const date = curr.recorded_at.split("T")[0];
+    if (!dataMap[date]) {
+      // Jika tanggal ini ada di planning tapi belum ada di aktual (tanggal masa depan)
+      dataMap[date] = { date };
+    }
+    // Masukkan nilai planning
+    dataMap[date].planned_value = curr.planned_value;
+  });
+
+  // Konversi Map kembali ke Array dan urutkan berdasarkan tanggal
+  const historyArray = Object.values(dataMap).sort((a, b) => a.date.localeCompare(b.date));
+
+  // 3. Ambil Data 'Latest' HANYA dari Metrics yang sudah terisi (untuk Grid & Pie Chart)
+  let latestMetrics: RawMetric[] = [];
+  let latestDate: string | null = null;
+
+  if (metrics.length > 0) {
+    // Cari tanggal terakhir dari data metrik aktual, bukan dari planning masa depan
+    latestDate = metrics[metrics.length - 1].recorded_at;
+    latestMetrics = metrics.filter((d) => d.recorded_at === latestDate);
+  }
+
   return {
     latest: latestMetrics,
-    history: Object.values(groupedData),
+    history: historyArray,
     lastUpdated: latestDate,
   };
 }
@@ -49,7 +93,10 @@ export default async function DashboardPage() {
   const { latest, history, lastUpdated } = await getDashboardData();
   const todayRaw = new Date();
   const todayFormatted = new Intl.DateTimeFormat("en-EN", { dateStyle: "full" }).format(todayRaw);
-  const previousData = history.length > 1 ? history[history.length - 2] : null;
+
+  // Ambil data previous HANYA dari tanggal yang memiliki metrik aktual (bukan sekadar planning)
+  const actualHistory = history.filter((h) => h.total_actual !== undefined);
+  const previousData = actualHistory.length > 1 ? actualHistory[actualHistory.length - 2] : null;
 
   return (
     <main className="relative bg-slate-50 dark:bg-[#020617] min-h-screen lg:h-screen w-full text-slate-900 dark:text-white flex flex-col lg:flex-row p-4 md:p-6 gap-6 transition-colors duration-500 overflow-y-auto lg:overflow-hidden">
@@ -79,23 +126,18 @@ export default async function DashboardPage() {
 
       <div className="relative z-10 w-full lg:w-[420px] flex flex-col gap-4">
         <div className="relative flex overflow-hidden bg-white/70 dark:bg-slate-900/40 backdrop-blur-md border border-slate-200 dark:border-slate-800 p-3 rounded-2xl">
-          {/* LABEL LOGS: Diberi bg-inherit dan z-20 agar tetap di atas teks berjalan */}
           <div className="flex shrink-0 items-center gap-2 px-3 pr-4 border-r border-slate-200 dark:border-slate-800 z-20 bg-white dark:bg-[#0f172a] relative">
             <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]"></div>
             <span className="text-[9px] font-black uppercase tracking-tighter text-slate-700 dark:text-slate-300">Logs</span>
-
-            {/* EFFECT: Gradient mask agar teks terlihat memudar sebelum menyentuh garis pembatas */}
             <div className="absolute top-0 -right-8 w-8 h-full bg-gradient-to-r from-white dark:from-[#0f172a] to-transparent pointer-events-none"></div>
           </div>
 
-          {/* CONTAINER TEKS BERJALAN: Diberi padding-left agar mulai dari setelah gradient */}
           <div className="relative flex-1 overflow-hidden">
             <div className="animate-marquee whitespace-nowrap flex gap-10 text-[10px] font-mono text-slate-500 dark:text-slate-400 py-0.5">
               <span>System Sync Complete ...</span>
               <span>Database Latency: 24ms ...</span>
               <span>Kiln Overhaul Phase 2 Initiated ...</span>
               <span>Monitoring P12 Tarjun Node ...</span>
-              {/* Tambahkan spasi ekstra atau ulangi teks agar loop terlihat mulus */}
               <span>System Sync Complete ...</span>
               <span>Database Latency: 24ms ...</span>
             </div>

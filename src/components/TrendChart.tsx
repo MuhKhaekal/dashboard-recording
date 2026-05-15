@@ -12,6 +12,8 @@ interface HistoryData {
   coal_mill?: number;
   finish_mill?: number;
   dispatch?: number;
+  planned_value?: number;
+  total_actual?: number;
   [key: string]: string | number | undefined;
 }
 
@@ -27,6 +29,7 @@ interface CustomTooltipProps {
   payload?: TooltipPayload[];
   label?: string;
   activeMode: string;
+  isSCurve?: boolean;
 }
 
 const NEON_COLORS: Record<string, string> = {
@@ -38,12 +41,21 @@ const NEON_COLORS: Record<string, string> = {
   dispatch: "#9d00ff",
 };
 
+const SCURVE_COLORS = {
+  planned: "#a855f7",
+  actual: "#0ea5e9",
+};
+
 const MODES = ["ALL", "KILN", "MINING", "RAW_MILL", "COAL_MILL", "FINISH_MILL", "DISPATCH"];
 
-// 2. FIX 'ANY' PADA TOOLTIP
-const CustomTooltip = ({ active, payload, label, activeMode }: CustomTooltipProps) => {
+// 2. TOOLTIP KUSTOM
+const CustomTooltip = ({ active, payload, label, activeMode, isSCurve }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
-    const filteredPayload = activeMode === "ALL" ? payload : payload.filter((item) => item.dataKey.toLowerCase() === activeMode.toLowerCase().replace(" ", "_"));
+    let filteredPayload = payload;
+
+    if (!isSCurve && activeMode !== "ALL") {
+      filteredPayload = payload.filter((item) => item.dataKey.toLowerCase() === activeMode.toLowerCase().replace(" ", "_"));
+    }
 
     if (filteredPayload.length === 0) return null;
 
@@ -75,12 +87,13 @@ const CustomTooltip = ({ active, payload, label, activeMode }: CustomTooltipProp
 };
 
 export default function TrendChart({ data }: { data: HistoryData[] }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef1 = useRef<HTMLDivElement>(null);
+  const scrollRef2 = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState<boolean>(false);
   const [activeMode, setActiveMode] = useState<string>("ALL");
+  const [currentSlide, setCurrentSlide] = useState<number>(0);
   const { theme } = useTheme();
 
-  // Helper untuk mengubah string mode (Contoh: "COAL_MILL") menjadi kunci data ("coal_mill")
   const getModeKey = (mode: string) => mode.toLowerCase().replace(" ", "_");
 
   useEffect(() => {
@@ -90,152 +103,294 @@ export default function TrendChart({ data }: { data: HistoryData[] }) {
     return () => clearTimeout(timer);
   }, []);
 
+  // ========================================================
+  // FIX: PISAHKAN DATA KHUSUS UNTUK AREA TRENDS (HILANGKAN MASA DEPAN)
+  // ========================================================
+  const areaChartData = useMemo(() => {
+    return data.filter((d) => d.total_actual !== undefined);
+  }, [data]);
+
   const stats = useMemo(() => {
-    if (!data || data.length === 0) return null;
-
-    // FIX: Gunakan helper untuk mencocokkan data
+    if (!areaChartData || areaChartData.length === 0) return null;
     const modeKey = getModeKey(activeMode);
-
     let values: number[] = [];
     if (activeMode === "ALL") {
-      values = data.flatMap((d) => Object.keys(NEON_COLORS).map((k) => Number(d[k]) || 0));
+      values = areaChartData.flatMap((d) => Object.keys(NEON_COLORS).map((k) => Number(d[k]) || 0));
     } else {
-      values = data.map((d) => Number(d[modeKey]) || 0);
+      values = areaChartData.map((d) => Number(d[modeKey]) || 0);
     }
-
     return {
       max: Math.max(...values),
       avg: values.reduce((a, b) => a + b, 0) / (values.length || 1),
       min: Math.min(...values),
     };
-  }, [data, activeMode]);
+  }, [areaChartData, activeMode]);
 
-  const nextMode = useCallback(() => {
-    setActiveMode((prev) => MODES[(MODES.indexOf(prev) + 1) % MODES.length]);
-  }, []);
+  const scurveStats = useMemo(() => {
+    if (!data || data.length === 0) return { maxActual: 0, maxPlan: 0, latestActual: 0, latestPlan: 0 };
+    const actuals = data.map((d) => Number(d.total_actual) || 0);
+    const plans = data.map((d) => Number(d.planned_value) || 0);
+    return {
+      maxActual: Math.max(...actuals),
+      maxPlan: Math.max(...plans),
+      // Ambil data aktual terakhir dari baris yang aktualnya tidak undefined
+      latestActual: areaChartData.length > 0 ? areaChartData[areaChartData.length - 1].total_actual || 0 : 0,
+      latestPlan: plans[plans.length - 1] || 0,
+    };
+  }, [data, areaChartData]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (scrollRef.current) scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+      if (scrollRef1.current) scrollRef1.current.scrollLeft = scrollRef1.current.scrollWidth;
+      if (scrollRef2.current) scrollRef2.current.scrollLeft = scrollRef2.current.scrollWidth;
     }, 200);
     return () => clearTimeout(timer);
-  }, [data, activeMode]);
+  }, [data, activeMode, currentSlide]);
 
   if (!isMounted || !data || data.length === 0) return <div className="h-full w-full bg-slate-200/40 dark:bg-slate-900/40 animate-pulse rounded-[2rem]" />;
 
-  // FIX: Logika nilai Y-Axis juga harus menggunakan modeKey yang benar
-  const currentValues = activeMode === "ALL" ? data.flatMap((d) => Object.keys(NEON_COLORS).map((k) => Number(d[k]) || 0)) : data.map((d) => Number(d[getModeKey(activeMode)]) || 0);
+  // Kalkulasi Y-Axis menggunakan data khusus Area
+  const currentValues = activeMode === "ALL" ? areaChartData.flatMap((d) => Object.keys(NEON_COLORS).map((k) => Number(d[k]) || 0)) : areaChartData.map((d) => Number(d[getModeKey(activeMode)]) || 0);
 
-  const rawMax = Math.max(...currentValues, 10);
+  const rawMax = currentValues.length > 0 ? Math.max(...currentValues, 10) : 10;
   const maxValueWithBuffer = Math.ceil((rawMax * 1.2) / 10) * 10;
-
   const yTicksManual = [maxValueWithBuffer, Math.round(maxValueWithBuffer * 0.75), Math.round(maxValueWithBuffer * 0.5), Math.round(maxValueWithBuffer * 0.25), 0];
 
-  const chartWidth = Math.max(100, (data.length * 100) / 10) + "%";
+  const sCurveMaxRaw = Math.max(scurveStats.maxActual, scurveStats.maxPlan, 10);
+  const sCurveMaxBuffer = Math.ceil((sCurveMaxRaw * 1.1) / 10) * 10;
+  const sCurveTicks = [sCurveMaxBuffer, Math.round(sCurveMaxBuffer * 0.75), Math.round(sCurveMaxBuffer * 0.5), Math.round(sCurveMaxBuffer * 0.25), 0];
+
+  // FIX: Pisahkan kalkulasi lebar chart (X-Axis) agar presisi saat discroll
+  const areaChartWidth = Math.max(100, (areaChartData.length * 100) / 10) + "%";
+  const sCurveChartWidth = Math.max(100, (data.length * 100) / 10) + "%";
+
   const gridStroke = theme === "dark" ? "#1e293b" : "#e2e8f0";
   const axisTickColor = theme === "dark" ? "#475569" : "#94a3b8";
 
   return (
-    <div className="h-full w-full flex flex-col transition-colors duration-500 overflow-hidden">
-      {/* HEADER & BUTTONS SECTION */}
-      <div className="flex flex-col gap-4 mb-6 shrink-0">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h3 className="text-xl font-black tracking-widest text-slate-800 dark:text-slate-200 uppercase">{activeMode === "ALL" ? "All Trends" : `Trend ${activeMode.replace("_", " ")}`}</h3>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[10px] font-mono text-cyan-500 animate-pulse font-bold">● LIVE SYNC</span>
-            </div>
-          </div>
-
-          <div className="flex gap-1 p-1 bg-slate-100 dark:bg-black/40 rounded-xl border border-slate-200 dark:border-slate-800">
-            {MODES.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setActiveMode(mode)}
-                style={{
-                  backgroundColor: activeMode === mode ? `${NEON_COLORS[getModeKey(mode)] || "#00f2ff"}22` : "transparent",
-                  borderColor: activeMode === mode ? NEON_COLORS[getModeKey(mode)] || "#00f2ff" : "transparent",
-                  color: activeMode === mode ? NEON_COLORS[getModeKey(mode)] || "#00f2ff" : "#64748b",
-                }}
-                className={`px-3 py-1.5 rounded-lg text-[12px] font-black transition-all duration-300 uppercase border ${activeMode === mode ? "shadow-sm" : "border-transparent"}`}
-              >
-                {mode.replace("_", " ")}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* STATS SECTION */}
-        <div className="flex justify-between gap-8 border-y border-slate-100 dark:border-slate-800/50 py-3 px-2">
-          <div>
-            <p className="text-[12px] font-mono text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Peak Load</p>
-            <p className="text-lg font-black text-slate-800 dark:text-slate-200 leading-none">{stats?.max.toLocaleString()}%</p>
-          </div>
-          <div>
-            <p className="text-[12px] font-mono text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Average</p>
-            <p className="text-lg font-black text-cyan-500 leading-none">{stats?.avg.toFixed(1)}%</p>
-          </div>
-          <div>
-            <p className="text-[12px] font-mono text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Lowest</p>
-            <p className="text-lg font-black text-slate-800 dark:text-slate-200 leading-none">{stats?.min.toLocaleString()}%</p>
-          </div>
-        </div>
-      </div>
-
-      {/* CHART SECTION */}
-      <div className="flex-1 min-h-0 flex relative w-full pr-4">
-        <div className="flex-none w-10 h-full flex flex-col justify-between items-end pr-3 pb-8 text-[9px] font-mono font-bold text-slate-400 dark:text-slate-600 z-30 border-r border-slate-100 dark:border-slate-800 transition-colors">
-          {yTicksManual.map((tick, i) => (
-            <span key={i} className="leading-none">
-              {tick}
-            </span>
+    <div className="h-full w-full flex flex-col transition-colors duration-500 overflow-hidden relative">
+      {/* ABSOLUTE HEADER PANEL (TOMBOL & FILTER) */}
+      <div className="absolute top-0 w-full z-50 flex justify-between items-start pointer-events-none">
+        {/* KIRI: TOMBOL FILTER AREA */}
+        <div
+          className={`pointer-events-auto flex gap-1 p-1 bg-slate-100 dark:bg-black/40 rounded-xl border border-slate-200 dark:border-slate-800 transition-all duration-500 origin-top-left ${
+            currentSlide === 0 ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
+          }`}
+        >
+          {MODES.map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setActiveMode(mode)}
+              style={{
+                backgroundColor: activeMode === mode ? `${NEON_COLORS[getModeKey(mode)] || "#00f2ff"}22` : "transparent",
+                borderColor: activeMode === mode ? NEON_COLORS[getModeKey(mode)] || "#00f2ff" : "transparent",
+                color: activeMode === mode ? NEON_COLORS[getModeKey(mode)] || "#00f2ff" : "#64748b",
+              }}
+              className={`px-3 py-1.5 rounded-lg text-[12px] font-black transition-all duration-300 uppercase border ${activeMode === mode ? "shadow-sm" : "border-transparent"}`}
+            >
+              {mode.replace("_", " ")}
+            </button>
           ))}
         </div>
 
-        <div ref={scrollRef} className="flex-1 h-full overflow-x-auto overflow-y-hidden scrollbar-hide">
-          <div style={{ width: chartWidth, minWidth: "100%" }} className="h-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} opacity={0.2} />
+        {/* KANAN: CAROUSEL CONTROLS */}
+        <div className="pointer-events-auto flex gap-2">
+          <button
+            onClick={() => setCurrentSlide(0)}
+            className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border ${
+              currentSlide === 0
+                ? "bg-cyan-500/10 text-cyan-500 border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.2)]"
+                : "bg-slate-100 dark:bg-slate-800/50 text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300"
+            }`}
+          >
+            Area Trends
+          </button>
+          <button
+            onClick={() => setCurrentSlide(1)}
+            className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border ${
+              currentSlide === 1
+                ? "bg-purple-500/10 text-purple-400 border-purple-500/50 shadow-[0_0_10px_rgba(168,85,247,0.2)]"
+                : "bg-slate-100 dark:bg-slate-800/50 text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300"
+            }`}
+          >
+            S-Curve Progress
+          </button>
+        </div>
+      </div>
 
-                {activeMode !== "ALL" && (
-                  <ReferenceLine y={stats?.avg} stroke={NEON_COLORS[getModeKey(activeMode)]} strokeDasharray="4 4" opacity={0.4} label={{ value: "AVG", position: "insideRight", fill: axisTickColor, fontSize: 8, fontWeight: "bold" }} />
-                )}
+      {/* CAROUSEL TRACK */}
+      <div className="flex-1 w-full h-full relative overflow-hidden mt-12">
+        <div className="absolute inset-0 flex h-full transition-transform duration-700 ease-in-out" style={{ width: "200%", transform: `translateX(-${currentSlide * 50}%)` }}>
+          {/* ==================================================== */}
+          {/* SLIDE 1: AREA TRENDS (MENGGUNAKAN areaChartData)     */}
+          {/* ==================================================== */}
+          <div className="w-1/2 h-full flex flex-col pr-2">
+            <div className="flex flex-col gap-4 shrink-0">
+              <div>
+                <h3 className="text-xl font-black tracking-widest text-slate-800 dark:text-slate-200 uppercase">{activeMode === "ALL" ? "All Trends" : `Trend ${activeMode.replace("_", " ")}`}</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] font-mono text-cyan-500 animate-pulse font-bold">● AREA METRICS</span>
+                </div>
+              </div>
 
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 9, fill: axisTickColor, fontWeight: "bold" }}
-                  axisLine={false}
-                  tickLine={false}
-                  dy={10}
-                  tickFormatter={(str) => new Date(str).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
-                />
+              <div className="flex justify-between gap-8 border-y border-slate-100 dark:border-slate-800/50 py-3 px-2">
+                <div>
+                  <p className="text-[12px] font-mono text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Peak Load</p>
+                  <p className="text-lg font-black text-slate-800 dark:text-slate-200 leading-none">{stats?.max.toLocaleString()}%</p>
+                </div>
+                <div>
+                  <p className="text-[12px] font-mono text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Average</p>
+                  <p className="text-lg font-black text-cyan-500 leading-none">{stats?.avg.toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-[12px] font-mono text-slate-400 dark:text-slate-600 uppercase tracking-tighter">Lowest</p>
+                  <p className="text-lg font-black text-slate-800 dark:text-slate-200 leading-none">{stats?.min.toLocaleString()}%</p>
+                </div>
+              </div>
+            </div>
 
-                <YAxis hide domain={[0, maxValueWithBuffer]} />
+            <div className="flex-1 min-h-0 flex relative w-full pr-4">
+              <div className="flex-none w-10 h-full flex flex-col justify-between items-end pr-3 pb-8 text-[9px] font-mono font-bold text-slate-400 dark:text-slate-600 z-30 border-r border-slate-100 dark:border-slate-800 transition-colors">
+                {yTicksManual.map((tick, i) => (
+                  <span key={i} className="leading-none">
+                    {tick}
+                  </span>
+                ))}
+              </div>
+              <div ref={scrollRef1} className="flex-1 h-full overflow-x-auto overflow-y-hidden scrollbar-hide">
+                <div style={{ width: areaChartWidth, minWidth: "100%" }} className="h-full">
+                  {/* FIX: LineChart di sini sekarang menggunakan areaChartData */}
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={areaChartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} opacity={0.2} />
+                      {activeMode !== "ALL" && (
+                        <ReferenceLine
+                          y={stats?.avg}
+                          stroke={NEON_COLORS[getModeKey(activeMode)]}
+                          strokeDasharray="4 4"
+                          opacity={0.4}
+                          label={{ value: "AVG", position: "insideRight", fill: axisTickColor, fontSize: 8, fontWeight: "bold" }}
+                        />
+                      )}
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 9, fill: axisTickColor, fontWeight: "bold" }}
+                        axisLine={false}
+                        tickLine={false}
+                        dy={10}
+                        tickFormatter={(str) => new Date(str).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
+                      />
+                      <YAxis hide domain={[0, maxValueWithBuffer]} />
+                      <Tooltip content={<CustomTooltip activeMode={activeMode} />} cursor={{ stroke: axisTickColor, strokeWidth: 1, strokeDasharray: "4 4" }} />
 
-                <Tooltip content={<CustomTooltip activeMode={activeMode} />} cursor={{ stroke: axisTickColor, strokeWidth: 1, strokeDasharray: "4 4" }} />
+                      {Object.entries(NEON_COLORS).map(([key, color]) => {
+                        const isVisible = activeMode === "ALL" || getModeKey(activeMode) === key;
+                        return (
+                          <Line
+                            key={key}
+                            type="monotone"
+                            dataKey={key}
+                            name={key.replace("_", " ").toUpperCase()}
+                            stroke={color}
+                            strokeWidth={isVisible ? (activeMode === "ALL" ? 2.5 : 4) : 0}
+                            opacity={isVisible ? 1 : 0}
+                            dot={isVisible ? { r: 3, fill: color, strokeWidth: 0 } : false}
+                            activeDot={isVisible ? { r: 6, stroke: theme === "dark" ? "#fff" : "#000", strokeWidth: 2 } : false}
+                            isAnimationActive={true}
+                          />
+                        );
+                      })}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
 
-                {Object.entries(NEON_COLORS).map(([key, color]) => {
-                  // FIX UTAMA: Normalisasi kedua sisi pembandingan
-                  const isVisible = activeMode === "ALL" || getModeKey(activeMode) === key;
+          {/* ==================================================== */}
+          {/* SLIDE 2: S-CURVE CHART (TETAP MENGGUNAKAN data PENUH)*/}
+          {/* ==================================================== */}
+          <div className="w-1/2 h-full flex flex-col pl-2">
+            <div className="flex flex-col gap-4 shrink-0">
+              <div>
+                <h3 className="text-xl font-black tracking-widest text-purple-500 dark:text-purple-400 uppercase">Master S-Curve</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] font-mono text-purple-400 animate-pulse font-bold">● PROGRESS TRACKING</span>
+                </div>
+              </div>
 
-                  return (
-                    <Line
-                      key={key}
-                      type="monotone"
-                      dataKey={key}
-                      name={key.replace("_", " ").toUpperCase()}
-                      stroke={color}
-                      strokeWidth={isVisible ? (activeMode === "ALL" ? 2.5 : 4) : 0}
-                      opacity={isVisible ? 1 : 0}
-                      dot={isVisible ? { r: 3, fill: color, strokeWidth: 0 } : false}
-                      activeDot={isVisible ? { r: 6, stroke: theme === "dark" ? "#fff" : "#000", strokeWidth: 2 } : false}
-                      isAnimationActive={true}
-                    />
-                  );
-                })}
-              </LineChart>
-            </ResponsiveContainer>
+              <div className="flex justify-start gap-12 border-y border-slate-100 dark:border-slate-800/50 py-3 px-2">
+                <div>
+                  <p className="text-[12px] font-mono text-purple-400/80 uppercase tracking-tighter">Current Plan</p>
+                  <p className="text-lg font-black text-purple-500 leading-none">{scurveStats.latestPlan.toFixed(2)}%</p>
+                </div>
+                <div>
+                  <p className="text-[12px] font-mono text-cyan-500/80 uppercase tracking-tighter">Current Actual</p>
+                  <p className="text-lg font-black text-cyan-500 leading-none">{scurveStats.latestActual.toFixed(2)}%</p>
+                </div>
+                <div>
+                  <p className="text-[12px] font-mono text-slate-400 dark:text-slate-500 uppercase tracking-tighter">Deviation</p>
+                  <p className={`text-lg font-black leading-none ${scurveStats.latestActual - scurveStats.latestPlan >= 0 ? "text-green-500" : "text-red-500"}`}>
+                    {scurveStats.latestActual - scurveStats.latestPlan > 0 ? "+" : ""}
+                    {(scurveStats.latestActual - scurveStats.latestPlan).toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0 flex relative w-full pr-4">
+              <div className="flex-none w-10 h-full flex flex-col justify-between items-end pr-3 pb-8 text-[9px] font-mono font-bold text-slate-400 dark:text-slate-600 z-30 border-r border-slate-100 dark:border-slate-800 transition-colors">
+                {sCurveTicks.map((tick, i) => (
+                  <span key={i} className="leading-none">
+                    {tick}
+                  </span>
+                ))}
+              </div>
+              <div ref={scrollRef2} className="flex-1 h-full overflow-x-auto overflow-y-hidden scrollbar-hide">
+                <div style={{ width: sCurveChartWidth, minWidth: "100%" }} className="h-full">
+                  {/* LineChart ini tetap pakai 'data' utuh agar garis planning membentang ke masa depan */}
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} opacity={0.2} />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 9, fill: axisTickColor, fontWeight: "bold" }}
+                        axisLine={false}
+                        tickLine={false}
+                        dy={10}
+                        tickFormatter={(str) => new Date(str).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
+                      />
+                      <YAxis hide domain={[0, sCurveMaxBuffer]} />
+
+                      <Tooltip content={<CustomTooltip activeMode="ALL" isSCurve={true} />} cursor={{ stroke: axisTickColor, strokeWidth: 1, strokeDasharray: "4 4" }} />
+
+                      <Line
+                        type="monotone"
+                        dataKey="planned_value"
+                        name="PLANNED PROGRESS"
+                        stroke={SCURVE_COLORS.planned}
+                        strokeWidth={3}
+                        strokeDasharray="8 6"
+                        dot={false}
+                        activeDot={{ r: 6, stroke: theme === "dark" ? "#fff" : "#000", strokeWidth: 2 }}
+                        isAnimationActive={true}
+                      />
+
+                      <Line
+                        type="monotone"
+                        dataKey="total_actual"
+                        name="ACTUAL PROGRESS"
+                        stroke={SCURVE_COLORS.actual}
+                        strokeWidth={4}
+                        dot={{ r: 3, fill: SCURVE_COLORS.actual, strokeWidth: 0 }}
+                        activeDot={{ r: 7, stroke: theme === "dark" ? "#fff" : "#000", strokeWidth: 2 }}
+                        isAnimationActive={true}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
