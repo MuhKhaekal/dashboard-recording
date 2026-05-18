@@ -145,7 +145,8 @@ export default async function DashboardPage() {
         </div>
 
         <div className="md:h-[600px] h-[800px] mt-3 md:mt-0 lg:flex-1 bg-white/70 dark:bg-slate-900/40 backdrop-blur-xl p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-xl dark:shadow-2xl flex flex-col overflow-hidden group hover:border-cyan-500/30 transition-all duration-700">
-          <DistributionChart data={latest} />
+          {/* Tambahkan previous={previousData} di sini 👇 */}
+          <DistributionChart data={latest} previous={previousData} />
         </div>
       </div>
     </main>
